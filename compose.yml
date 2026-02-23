@@ -1,0 +1,39 @@
+services:
+  php:
+    image: serversideup/php:8.5-fpm-nginx
+    ports:
+      - "80:8080"
+      - "443:8443"
+    volumes:
+      - .:/var/www/html
+    environment:
+      SSL_MODE: "full"
+      PHP_OPCACHE_ENABLE: "1"
+    depends_on:
+      - mariadb
+      - redis
+
+  mariadb:
+    image: mariadb:11
+    environment:
+      MYSQL_ROOT_PASSWORD: root
+      MYSQL_DATABASE: dockerphp-test
+      MYSQL_USER: root
+      MYSQL_PASSWORD: root
+    volumes:
+      - db_data:/var/lib/mysql
+
+  redis:
+    image: redis:alpine
+    command: redis-server --appendonly yes
+    volumes:
+      - redis_data:/data
+
+  adminer:
+    image: adminer
+    ports:
+      - 8080:8080
+
+volumes:
+  db_data:
+  redis_data:
