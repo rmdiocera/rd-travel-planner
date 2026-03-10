@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 use App\Http\Middleware\HandleAppearance;
 use App\Http\Middleware\HandleInertiaRequests;
 use Illuminate\Foundation\Application;
@@ -10,6 +12,7 @@ use Illuminate\Http\Middleware\AddLinkHeadersForPreloadedAssets;
 return Application::configure(basePath: dirname(__DIR__))
     ->withRouting(
         web: __DIR__.'/../routes/web.php',
+        api: __DIR__.'/../routes/api/routes.php',
         commands: __DIR__.'/../routes/console.php',
         health: '/up',
     )
@@ -21,6 +24,12 @@ return Application::configure(basePath: dirname(__DIR__))
             HandleInertiaRequests::class,
             AddLinkHeadersForPreloadedAssets::class,
         ]);
+
+        // Uncomment to enable session-based Fortify auth on API routes.
+        // Required when the frontend self-consumes this API using session cookies.
+        // $middleware->api(append: [
+        //     \Illuminate\Session\Middleware\StartSession::class,
+        // ]);
     })
     ->withExceptions(function (Exceptions $exceptions): void {
         //
