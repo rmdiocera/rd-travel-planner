@@ -17,7 +17,7 @@ services:
     image: mariadb:11
     environment:
       MYSQL_ROOT_PASSWORD: root
-      MYSQL_DATABASE: dockerphp-test
+      MYSQL_DATABASE: travel-planner
       MYSQL_USER: root
       MYSQL_PASSWORD: root
     volumes:
