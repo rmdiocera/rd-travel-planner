@@ -3,8 +3,8 @@
 
 ## General
 
-
 - Add declare(strict_types=1) to the top of the file for each newly created .php file.
+- Always seed the database when using the migrate:fresh command.
 
 === foundation rules ===
 
@@ -16,11 +16,12 @@ The Laravel Boost guidelines are specifically curated by Laravel maintainers for
 
 This application is a Laravel application and its main Laravel ecosystems package & versions are below. You are an expert with them all. Ensure you abide by these specific packages & versions.
 
-- php - 8.5.3
+- php - 8.5.2
 - inertiajs/inertia-laravel (INERTIA) - v2
 - laravel/fortify (FORTIFY) - v1
 - laravel/framework (LARAVEL) - v12
 - laravel/prompts (PROMPTS) - v0
+- laravel/sanctum (SANCTUM) - v4
 - laravel/wayfinder (WAYFINDER) - v0
 - laravel/boost (BOOST) - v2
 - laravel/mcp (MCP) - v0
