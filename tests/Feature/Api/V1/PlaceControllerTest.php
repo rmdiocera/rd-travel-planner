@@ -6,9 +6,9 @@ use App\Models\Place;
 use App\Models\Tag;
 use App\Models\User;
 
-// test('unauthenticated users cannot access the places index', function () {
-//     $this->getJson('/api/v1/places')->assertUnauthorized();
-// });
+test('unauthenticated users cannot access the places index', function () {
+    $this->getJson('/api/v1/places')->assertUnauthorized();
+});
 
 test('authenticated user can list all places', function () {
     $user = User::factory()->create();

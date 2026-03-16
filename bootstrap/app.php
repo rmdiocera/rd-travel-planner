@@ -25,11 +25,9 @@ return Application::configure(basePath: dirname(__DIR__))
             AddLinkHeadersForPreloadedAssets::class,
         ]);
 
-        // Uncomment to enable session-based Fortify auth on API routes.
-        // Required when the frontend self-consumes this API using session cookies.
-        // $middleware->api(append: [
-        //     \Illuminate\Session\Middleware\StartSession::class,
-        // ]);
+        $middleware->api(prepend: [
+            \Laravel\Sanctum\Http\Middleware\EnsureFrontendRequestsAreStateful::class,
+        ]);
     })
     ->withExceptions(function (Exceptions $exceptions): void {
         //
