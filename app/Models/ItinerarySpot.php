@@ -8,11 +8,10 @@ use Illuminate\Database\Eloquent\Concerns\HasUlids;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
-use Illuminate\Database\Eloquent\Relations\HasMany;
 
-class Itinerary extends Model
+class ItinerarySpot extends Model
 {
-    /** @use HasFactory<\Database\Factories\ItineraryFactory> */
+    /** @use HasFactory<\Database\Factories\ItinerarySpotFactory> */
     use HasFactory, HasUlids;
 
     /**
@@ -21,11 +20,12 @@ class Itinerary extends Model
      * @var list<string>
      */
     protected $fillable = [
-        'user_id',
-        'name',
-        'start_date',
-        'end_date',
-        'notes',
+        'itinerary_id',
+        'place_id',
+        'visit_date',
+        'start_time',
+        'end_time',
+        'marked_visited',
     ];
 
     /**
@@ -36,18 +36,18 @@ class Itinerary extends Model
     protected function casts(): array
     {
         return [
-            'start_date' => 'date',
-            'end_date' => 'date',
+            'visit_date' => 'date',
+            'marked_visited' => 'boolean',
         ];
     }
 
-    public function user(): BelongsTo
+    public function itinerary(): BelongsTo
     {
-        return $this->belongsTo(User::class);
+        return $this->belongsTo(Itinerary::class);
     }
 
-    public function spots(): HasMany
+    public function place(): BelongsTo
     {
-        return $this->hasMany(ItinerarySpot::class);
+        return $this->belongsTo(Place::class);
     }
 }
