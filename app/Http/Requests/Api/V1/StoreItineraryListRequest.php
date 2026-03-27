@@ -7,7 +7,7 @@ namespace App\Http\Requests\Api\V1;
 use Illuminate\Contracts\Validation\ValidationRule;
 use Illuminate\Foundation\Http\FormRequest;
 
-class UpdateItinerarySpotRequest extends FormRequest
+class StoreItineraryListRequest extends FormRequest
 {
     /**
      * Get the validation rules that apply to the request.
@@ -17,10 +17,8 @@ class UpdateItinerarySpotRequest extends FormRequest
     public function rules(): array
     {
         return [
-            'visit_date' => ['required', 'date'],
-            'start_time' => ['nullable', 'date_format:H:i'],
-            'end_time' => ['nullable', 'date_format:H:i', 'after:start_time'],
-            'marked_visited' => ['boolean'],
+            'name' => ['required', 'string', 'max:255'],
+            'sort_order' => ['nullable', 'integer'],
         ];
     }
 }

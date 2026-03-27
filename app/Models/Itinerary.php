@@ -50,4 +50,16 @@ class Itinerary extends Model
     {
         return $this->hasMany(ItinerarySpot::class);
     }
+
+    public function lists(): HasMany
+    {
+        return $this->hasMany(ItineraryList::class);
+    }
+
+    public function reorderLists(array $list_ids): void
+    {
+        collect($list_ids)->each(function ($id, $index) {
+            $this->lists()->where('id', $id)->update(['sort_order' => $index + 1]);
+        });
+    }
 }
