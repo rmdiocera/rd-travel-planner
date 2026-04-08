@@ -24,7 +24,18 @@ class ItineraryListController extends Controller
         abort_if($itinerary->user_id !== $request->user()->id, 403);
 
         return ItineraryListResource::collection(
-            $itinerary->lists()->orderBy('sort_order')->get()
+            $itinerary->lists()
+                ->with([
+                    'items' => function ($query) {
+                        $query->orderBy('sort_order');
+                    },
+                    'items.placeItem.place',
+                    'items.checklistItems' => function ($query) {
+                        $query->orderBy('sort_order');
+                    },
+                ])
+                ->orderBy('sort_order')
+                ->get()
         );
     }
 
@@ -78,7 +89,11 @@ class ItineraryListController extends Controller
         $list->delete();
 
         if ($itinerary->lists()->count() > 0) {
-            $itinerary->reorderLists($itinerary->lists()->pluck('id')->toArray());
+            $itinerary->reorderLists($itinerary->lists()
+                ->orderBy('sort_order')
+                ->pluck('id')
+                ->toArray()
+            );
         }
 
         return response()->json(null, 204);

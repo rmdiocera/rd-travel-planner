@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Models;
 
+use App\Http\Traits\HasReorderableItems;
 use Illuminate\Database\Eloquent\Concerns\HasUlids;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
@@ -13,7 +14,7 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 class Itinerary extends Model
 {
     /** @use HasFactory<\Database\Factories\ItineraryFactory> */
-    use HasFactory, HasUlids;
+    use HasFactory, HasReorderableItems, HasUlids;
 
     /**
      * The attributes that are mass assignable.
@@ -58,8 +59,6 @@ class Itinerary extends Model
 
     public function reorderLists(array $list_ids): void
     {
-        collect($list_ids)->each(function ($id, $index) {
-            $this->lists()->where('id', $id)->update(['sort_order' => $index + 1]);
-        });
+        $this->reorder(fn () => $this->lists(), $list_ids);
     }
 }
