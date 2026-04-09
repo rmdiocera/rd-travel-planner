@@ -19,9 +19,9 @@ class UpdateItineraryListItemRequest extends FormRequest
     {
         return [
             'type' => ['required', 'string', 'in:place,checklist,note'],
-            'start_time' => ['required_if:type,place', 'nullable', 'date_format:H:i'],
-            'end_time' => ['required_if:type,place', 'nullable', 'date_format:H:i', 'after:start_time'],
-            'marked_visited' => ['required_if:type,place', 'boolean'],
+            'start_time' => ['nullable', 'date_format:H:i'],
+            'end_time' => ['nullable', 'date_format:H:i', 'after:start_time'],
+            'marked_visited' => ['boolean'],
             'title' => ['nullable', 'string', 'max:255'],
             'label' => ['nullable', 'string', 'max:255'],
             'is_checked' => ['boolean'],

@@ -18,7 +18,7 @@ return new class extends Migration
             $table->foreignUlid('itinerary_list_item_id')->constrained('itinerary_list_items', 'id', 'ili_checklist_items_fk')->cascadeOnDelete();
             $table->string('label');
             $table->boolean('is_checked')->default(false);
-            $table->tinyInteger('sort_order');
+            $table->unsignedTinyInteger('sort_order');
             $table->timestamps();
         });
     }

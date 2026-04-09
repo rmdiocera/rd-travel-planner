@@ -19,7 +19,7 @@ return new class extends Migration
             $table->enum('type', ['place', 'checklist', 'note']);
             $table->string('title')->nullable();
             $table->text('content')->nullable();
-            $table->tinyInteger('sort_order');
+            $table->unsignedTinyInteger('sort_order');
             $table->timestamps();
         });
     }

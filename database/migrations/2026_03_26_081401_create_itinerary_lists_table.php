@@ -17,7 +17,7 @@ return new class extends Migration
             $table->ulid('id')->primary();
             $table->foreignUlid('itinerary_id')->constrained()->cascadeOnDelete();
             $table->string('name');
-            $table->tinyInteger('sort_order')->nullable();
+            $table->unsignedTinyInteger('sort_order')->nullable();
             $table->timestamps();
         });
     }

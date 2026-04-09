@@ -68,7 +68,7 @@ test('user can add a note item to their list', function () {
     expect($list->items()->count())->toBe(1);
 });
 
-test('user can update a place item on their list', function () {
+test('user can update the start time and end time of a place item on their list', function () {
     $user = User::factory()->create();
     $place = Place::factory()->create();
     $itinerary = Itinerary::factory()->for($user)->create();
@@ -86,16 +86,38 @@ test('user can update a place item on their list', function () {
             'type' => 'place',
             'start_time' => '14:00',
             'end_time' => '16:00',
-            'marked_visited' => true,
         ])
         ->assertOk()
         ->assertJsonPath('data.type', 'place')
         ->assertJsonPath('data.place.start_time', '14:00:00')
-        ->assertJsonPath('data.place.end_time', '16:00:00')
-        ->assertJsonPath('data.place.marked_visited', true);
+        ->assertJsonPath('data.place.end_time', '16:00:00');
 
     expect($place_item->refresh()->start_time)->toBe('14:00:00');
     expect($place_item->refresh()->end_time)->toBe('16:00:00');
+});
+
+test('user can toggle marked_visited on a place item', function () {
+    $user = User::factory()->create();
+    $place = Place::factory()->create();
+    $itinerary = Itinerary::factory()->for($user)->create();
+    $list = ItineraryList::factory()->for($itinerary)->create(['sort_order' => 1]);
+    $item = ItineraryListItem::factory()->for($list)->create([
+        'type' => 'place',
+        'sort_order' => 1,
+    ]);
+    $place_item = ItineraryListItemPlace::factory()->for($item, 'item')->create([
+        'place_id' => $place->id,
+    ]);
+
+    $this->actingAs($user)
+        ->patchJson("/api/v1/itineraries/{$itinerary->id}/lists/{$list->id}/items/{$item->id}", [
+            'type' => 'place',
+            'marked_visited' => true,
+        ])
+        ->assertOk()
+        ->assertJsonPath('data.type', 'place')
+        ->assertJsonPath('data.place.marked_visited', true);
+
     expect($place_item->refresh()->marked_visited)->toBeTrue();
 });
 
