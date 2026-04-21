@@ -24,7 +24,7 @@ class ItineraryListItemFactory extends Factory
             'itinerary_lists_id' => ItineraryList::factory(),
             'type' => fake()->randomElement(ItineraryListItemType::cases())->value,
             'content' => null,
-            'sort_order' => fake()->numberBetween(1, 10),
+            'sort_order' => 1,
         ];
     }
 }

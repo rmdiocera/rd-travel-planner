@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 use App\Models\Itinerary;
 use App\Models\ItineraryList;
+use App\Models\ItineraryListItem;
+use App\Models\ItineraryListItemChecklistItem;
 use App\Models\User;
 
 test('unauthenticated users cannot access list endpoints', function () {
@@ -106,7 +108,20 @@ test('user can update their list', function () {
 test('user can reorder lists', function () {
     $user = User::factory()->create();
     $itinerary = Itinerary::factory()->for($user)->create();
-    [$first, $second, $third] = ItineraryList::factory()->count(3)->for($itinerary)->create();
+    [$first, $second, $third] = ItineraryList::factory()->for($itinerary)->createMany([
+        [
+            'name' => 'Places to Visit',
+            'sort_order' => 1,
+        ],
+        [
+            'name' => 'Things to Buy',
+            'sort_order' => 2,
+        ],
+        [
+            'name' => 'Things to Bring',
+            'sort_order' => 3,
+        ],
+    ]);
 
     $this->actingAs($user)
         ->patchJson("/api/v1/itineraries/{$itinerary->id}/lists/reorder", [
@@ -147,7 +162,20 @@ test('user can delete their list', function () {
 test('deleting a list reorders remaining lists', function () {
     $user = User::factory()->create();
     $itinerary = Itinerary::factory()->for($user)->create();
-    [$first, $second, $third] = ItineraryList::factory()->count(3)->for($itinerary)->create();
+    [$first, $second, $third] = ItineraryList::factory()->for($itinerary)->createMany([
+        [
+            'name' => 'Places to Visit',
+            'sort_order' => 1,
+        ],
+        [
+            'name' => 'Things to Buy',
+            'sort_order' => 2,
+        ],
+        [
+            'name' => 'Things to Bring',
+            'sort_order' => 3,
+        ],
+    ]);
 
     $this->actingAs($user)
         ->deleteJson("/api/v1/itineraries/{$itinerary->id}/lists/{$first->id}")
@@ -156,6 +184,51 @@ test('deleting a list reorders remaining lists', function () {
     expect($first->fresh())->toBeNull();
     expect($second->refresh()->sort_order)->toBe(1);
     expect($third->refresh()->sort_order)->toBe(2);
+});
+
+test('deleting a list deletes its items', function () {
+    $user = User::factory()->create();
+    $itinerary = Itinerary::factory()->for($user)->create();
+    $list = ItineraryList::factory()->for($itinerary)->create();
+    [$first, $second, $third] = ItineraryListItem::factory()->for($list)->createMany([
+        [
+            'type' => 'place',
+            'sort_order' => 1,
+        ],
+        [
+            'type' => 'checklist',
+            'sort_order' => 2,
+        ],
+        [
+            'type' => 'note',
+            'sort_order' => 3,
+        ],
+    ]);
+    [$first_cl_item, $second_cl_item, $third_cl_item] = ItineraryListItemChecklistItem::factory()->for($second, 'item')->createMany([
+        [
+            'label' => 'Fushimi Inari',
+            'sort_order' => 1,
+        ],
+        [
+            'label' => 'Himeji Castle',
+            'sort_order' => 2,
+        ],
+        [
+            'label' => 'Kiyomizu-dera',
+            'sort_order' => 3,
+        ],
+    ]);
+
+    $this->actingAs($user)
+        ->deleteJson("/api/v1/itineraries/{$itinerary->id}/lists/{$list->id}")
+        ->assertNoContent();
+
+    expect($first->fresh())->toBeNull();
+    expect($second->fresh())->toBeNull();
+    expect($third->fresh())->toBeNull();
+    expect($first_cl_item->fresh())->toBeNull();
+    expect($second_cl_item->fresh())->toBeNull();
+    expect($third_cl_item->fresh())->toBeNull();
 });
 
 test('user cannot delete a list on another user\'s itinerary', function () {

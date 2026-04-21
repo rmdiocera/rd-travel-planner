@@ -17,16 +17,52 @@ class UpdateItineraryListItemRequest extends FormRequest
      */
     public function rules(): array
     {
+        $isPlace = $this->type === 'place';
+        $isChecklist = $this->type === 'checklist';
+        $isNote = $this->type === 'note';
+
         return [
             'type' => ['required', 'string', 'in:place,checklist,note'],
-            'start_time' => ['nullable', 'date_format:H:i'],
-            'end_time' => ['nullable', 'date_format:H:i', 'after:start_time'],
-            'marked_visited' => ['boolean'],
-            'title' => ['nullable', 'string', 'max:255'],
-            'label' => ['nullable', 'string', 'max:255'],
-            'is_checked' => ['boolean'],
-            'checklist_item_id' => ['nullable', 'string', Rule::exists('itinerary_list_item_checklist_items', 'id')->where('itinerary_list_item_id', $this->item->id)],
-            'content' => ['required_if:type,note', 'nullable', 'string'],
+
+            // Place fields
+            'start_time' => [
+                Rule::requiredIf($isPlace && ! $this->has('marked_visited')),
+                'required_with:end_time',
+                'nullable',
+                'date_format:H:i',
+                Rule::prohibitedIf(! $isPlace),
+            ],
+            'end_time' => [
+                Rule::requiredIf($isPlace && ! $this->has('marked_visited')),
+                'required_with:start_time',
+                'nullable',
+                'date_format:H:i',
+                'after:start_time',
+                Rule::prohibitedIf(! $isPlace),
+            ],
+            'marked_visited' => [
+                Rule::requiredIf($isPlace && ! $this->has('start_time') && ! $this->has('end_time')),
+                'nullable',
+                'boolean',
+                Rule::prohibitedIf(! $isPlace),
+            ],
+
+            // Checklist fields
+            'title' => [
+                'nullable',
+                'string',
+                'max:255',
+                Rule::prohibitedIf(! $isChecklist),
+            ],
+
+            // Note fields
+            'content' => [
+                'required_if:type,note',
+                'nullable',
+                'string',
+                Rule::prohibitedIf(! $isNote),
+            ],
+
             'sort_order' => ['nullable', 'integer'],
         ];
     }

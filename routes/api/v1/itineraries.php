@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 use App\Http\Controllers\Api\V1\ItineraryController;
 use App\Http\Controllers\Api\V1\ItineraryListController;
+use App\Http\Controllers\Api\V1\ItineraryListItemChecklistItemController;
 use App\Http\Controllers\Api\V1\ItineraryListItemController;
 use App\Http\Controllers\Api\V1\ItinerarySpotController;
 use Illuminate\Support\Facades\Route;
@@ -26,6 +27,8 @@ Route::apiResource('itineraries/{itinerary}/lists/{list}/items', ItineraryListIt
     ->parameters(['items' => 'item'])
     ->except(['index', 'show']);
 
-Route::patch('itineraries/{itinerary}/lists/{list}/items/{item}/checklist/reorder', [ItineraryListItemController::class, 'reorderChecklistItems'])->name('itineraries.lists.items.checklist.reorder');
+Route::patch('itineraries/{itinerary}/lists/{list}/items/{item}/checklist/reorder', [ItineraryListItemChecklistItemController::class, 'reorder'])->name('itineraries.lists.items.checklist.reorder');
 
-Route::delete('itineraries/{itinerary}/lists/{list}/items/{item}/checklist/{checklistItem}', [ItineraryListItemController::class, 'deleteChecklistItem'])->name('itineraries.lists.items.delete-checklist-item');
+Route::apiResource('itineraries/{itinerary}/lists/{list}/items/{item}/checklist', ItineraryListItemChecklistItemController::class)
+    ->parameters(['checklist' => 'checklistItem'])
+    ->only(['store', 'update', 'destroy']);
