@@ -22,7 +22,7 @@ class ItineraryListFactory extends Factory
         return [
             'itinerary_id' => Itinerary::factory(),
             'name' => fake()->words(3, true),
-            'sort_order' => null,
+            'sort_order' => 1,
         ];
     }
 }

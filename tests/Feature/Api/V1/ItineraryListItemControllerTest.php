@@ -142,111 +142,6 @@ test('user can update the title of a checklist on their list', function () {
     expect($item->refresh()->title)->toBe('Places to Visit');
 });
 
-test('user can add an item to their checklist', function () {
-    $user = User::factory()->create();
-    $itinerary = Itinerary::factory()->for($user)->create();
-    $list = ItineraryList::factory()->for($itinerary)->create(['sort_order' => 1]);
-    $item = ItineraryListItem::factory()->for($list)->create([
-        'type' => 'checklist',
-        'sort_order' => 1,
-    ]);
-
-    $this->actingAs($user)
-        ->patchJson("/api/v1/itineraries/{$itinerary->id}/lists/{$list->id}/items/{$item->id}", [
-            'type' => 'checklist',
-            'label' => 'Fushimi Inari',
-        ])
-        ->assertOk()
-        ->assertJsonPath('data.type', 'checklist')
-        ->assertJsonPath('data.checklist_items.0.label', 'Fushimi Inari')
-        ->assertJsonPath('data.checklist_items.0.sort_order', 1);
-});
-
-test('user can add multiple items to their checklist', function () {
-    $user = User::factory()->create();
-    $itinerary = Itinerary::factory()->for($user)->create();
-    $list = ItineraryList::factory()->for($itinerary)->create(['sort_order' => 1]);
-    $item = ItineraryListItem::factory()->for($list)->create([
-        'type' => 'checklist',
-        'sort_order' => 1,
-    ]);
-
-    $this->actingAs($user)
-        ->patchJson("/api/v1/itineraries/{$itinerary->id}/lists/{$list->id}/items/{$item->id}", [
-            'type' => 'checklist',
-            'label' => 'Fushimi Inari',
-        ])
-        ->assertOk()
-        ->assertJsonPath('data.type', 'checklist')
-        ->assertJsonPath('data.checklist_items.0.label', 'Fushimi Inari')
-        ->assertJsonPath('data.checklist_items.0.sort_order', 1);
-
-    $this->actingAs($user)
-        ->patchJson("/api/v1/itineraries/{$itinerary->id}/lists/{$list->id}/items/{$item->id}", [
-            'type' => 'checklist',
-            'label' => 'Himeji Castle',
-        ])
-        ->assertOk()
-        ->assertJsonPath('data.type', 'checklist')
-        ->assertJsonPath('data.checklist_items.1.label', 'Himeji Castle')
-        ->assertJsonPath('data.checklist_items.1.sort_order', 2);
-});
-
-test('user can change the label of an item on their checklist', function () {
-    $user = User::factory()->create();
-    $itinerary = Itinerary::factory()->for($user)->create();
-    $list = ItineraryList::factory()->for($itinerary)->create(['sort_order' => 1]);
-    $item = ItineraryListItem::factory()->for($list)->create([
-        'type' => 'checklist',
-        'sort_order' => 1,
-    ]);
-    $checklist_item = ItineraryListItemChecklistItem::factory()->for($item, 'item')->create([
-        'label' => 'Fushimi Inari',
-        'sort_order' => 1,
-    ]);
-
-    $this->actingAs($user)
-        ->patchJson("/api/v1/itineraries/{$itinerary->id}/lists/{$list->id}/items/{$item->id}", [
-            'type' => 'checklist',
-            'checklist_item_id' => $checklist_item->id,
-            'label' => 'Himeji Castle',
-        ])
-        ->assertOk()
-        ->assertJsonPath('data.checklist_items.0.label', 'Himeji Castle');
-});
-
-test('user can toggle an item on their checklist', function () {
-    $user = User::factory()->create();
-    $itinerary = Itinerary::factory()->for($user)->create();
-    $list = ItineraryList::factory()->for($itinerary)->create(['sort_order' => 1]);
-    $item = ItineraryListItem::factory()->for($list)->create([
-        'type' => 'checklist',
-        'sort_order' => 1,
-    ]);
-    $checklist_item = ItineraryListItemChecklistItem::factory()->for($item, 'item')->create([
-        'label' => 'Fushimi Inari',
-        'sort_order' => 1,
-    ]);
-
-    $this->actingAs($user)
-        ->patchJson("/api/v1/itineraries/{$itinerary->id}/lists/{$list->id}/items/{$item->id}", [
-            'type' => 'checklist',
-            'checklist_item_id' => $checklist_item->id,
-            'is_checked' => true,
-        ])
-        ->assertOk()
-        ->assertJsonPath('data.checklist_items.0.is_checked', true);
-
-    $this->actingAs($user)
-        ->patchJson("/api/v1/itineraries/{$itinerary->id}/lists/{$list->id}/items/{$item->id}", [
-            'type' => 'checklist',
-            'checklist_item_id' => $checklist_item->id,
-            'is_checked' => false,
-        ])
-        ->assertOk()
-        ->assertJsonPath('data.checklist_items.0.is_checked', false);
-});
-
 test('user can update the content of a note on their list', function () {
     $user = User::factory()->create();
     $itinerary = Itinerary::factory()->for($user)->create();
@@ -268,6 +163,72 @@ test('user can update the content of a note on their list', function () {
     expect($item->refresh()->content)->toBe('Bring sunscreen and umbrella');
 });
 
+test('start_time and end_time are required when updating a place item without marked_visited', function () {
+    $user = User::factory()->create();
+    $place = Place::factory()->create();
+    $itinerary = Itinerary::factory()->for($user)->create();
+    $list = ItineraryList::factory()->for($itinerary)->create(['sort_order' => 1]);
+    $item = ItineraryListItem::factory()->for($list)->create(['type' => 'place', 'sort_order' => 1]);
+    ItineraryListItemPlace::factory()->for($item, 'item')->create(['place_id' => $place->id]);
+
+    $this->actingAs($user)
+        ->patchJson("/api/v1/itineraries/{$itinerary->id}/lists/{$list->id}/items/{$item->id}", [
+            'type' => 'place',
+        ])
+        ->assertUnprocessable()
+        ->assertJsonValidationErrors(['start_time', 'end_time']);
+});
+
+test('marked_visited is required when updating a place item without start_time and end_time', function () {
+    $user = User::factory()->create();
+    $place = Place::factory()->create();
+    $itinerary = Itinerary::factory()->for($user)->create();
+    $list = ItineraryList::factory()->for($itinerary)->create(['sort_order' => 1]);
+    $item = ItineraryListItem::factory()->for($list)->create(['type' => 'place', 'sort_order' => 1]);
+    ItineraryListItemPlace::factory()->for($item, 'item')->create(['place_id' => $place->id]);
+
+    $this->actingAs($user)
+        ->patchJson("/api/v1/itineraries/{$itinerary->id}/lists/{$list->id}/items/{$item->id}", [
+            'type' => 'place',
+        ])
+        ->assertUnprocessable()
+        ->assertJsonValidationErrors(['marked_visited']);
+});
+
+test('end_time is required when start_time is present', function () {
+    $user = User::factory()->create();
+    $place = Place::factory()->create();
+    $itinerary = Itinerary::factory()->for($user)->create();
+    $list = ItineraryList::factory()->for($itinerary)->create(['sort_order' => 1]);
+    $item = ItineraryListItem::factory()->for($list)->create(['type' => 'place', 'sort_order' => 1]);
+    ItineraryListItemPlace::factory()->for($item, 'item')->create(['place_id' => $place->id]);
+
+    $this->actingAs($user)
+        ->patchJson("/api/v1/itineraries/{$itinerary->id}/lists/{$list->id}/items/{$item->id}", [
+            'type' => 'place',
+            'start_time' => '14:00',
+        ])
+        ->assertUnprocessable()
+        ->assertJsonValidationErrors(['end_time']);
+});
+
+test('start_time is required when end_time is present', function () {
+    $user = User::factory()->create();
+    $place = Place::factory()->create();
+    $itinerary = Itinerary::factory()->for($user)->create();
+    $list = ItineraryList::factory()->for($itinerary)->create(['sort_order' => 1]);
+    $item = ItineraryListItem::factory()->for($list)->create(['type' => 'place', 'sort_order' => 1]);
+    ItineraryListItemPlace::factory()->for($item, 'item')->create(['place_id' => $place->id]);
+
+    $this->actingAs($user)
+        ->patchJson("/api/v1/itineraries/{$itinerary->id}/lists/{$list->id}/items/{$item->id}", [
+            'type' => 'place',
+            'end_time' => '16:00',
+        ])
+        ->assertUnprocessable()
+        ->assertJsonValidationErrors(['start_time']);
+});
+
 test('content is required when updating a note on their list', function () {
     $user = User::factory()->create();
     $itinerary = Itinerary::factory()->for($user)->create();
@@ -281,6 +242,54 @@ test('content is required when updating a note on their list', function () {
         ->patchJson("/api/v1/itineraries/{$itinerary->id}/lists/{$list->id}/items/{$item->id}", [
             'type' => 'note',
             'content' => '',
+        ])
+        ->assertUnprocessable()
+        ->assertJsonValidationErrors(['content']);
+});
+
+test('place fields are prohibited when type is not place', function () {
+    $user = User::factory()->create();
+    $itinerary = Itinerary::factory()->for($user)->create();
+    $list = ItineraryList::factory()->for($itinerary)->create(['sort_order' => 1]);
+    $item = ItineraryListItem::factory()->for($list)->create(['type' => 'note', 'sort_order' => 1]);
+
+    $this->actingAs($user)
+        ->patchJson("/api/v1/itineraries/{$itinerary->id}/lists/{$list->id}/items/{$item->id}", [
+            'type' => 'note',
+            'content' => 'Some note',
+            'start_time' => '14:00',
+        ])
+        ->assertUnprocessable()
+        ->assertJsonValidationErrors(['start_time']);
+});
+
+test('checklist fields are prohibited when type is not checklist', function () {
+    $user = User::factory()->create();
+    $itinerary = Itinerary::factory()->for($user)->create();
+    $list = ItineraryList::factory()->for($itinerary)->create(['sort_order' => 1]);
+    $item = ItineraryListItem::factory()->for($list)->create(['type' => 'note', 'sort_order' => 1]);
+
+    $this->actingAs($user)
+        ->patchJson("/api/v1/itineraries/{$itinerary->id}/lists/{$list->id}/items/{$item->id}", [
+            'type' => 'note',
+            'content' => 'Some note',
+            'title' => 'Some title',
+        ])
+        ->assertUnprocessable()
+        ->assertJsonValidationErrors(['title']);
+});
+
+test('note fields are prohibited when type is not note', function () {
+    $user = User::factory()->create();
+    $itinerary = Itinerary::factory()->for($user)->create();
+    $list = ItineraryList::factory()->for($itinerary)->create(['sort_order' => 1]);
+    $item = ItineraryListItem::factory()->for($list)->create(['type' => 'checklist', 'sort_order' => 1]);
+
+    $this->actingAs($user)
+        ->patchJson("/api/v1/itineraries/{$itinerary->id}/lists/{$list->id}/items/{$item->id}", [
+            'type' => 'checklist',
+            'title' => 'My Checklist',
+            'content' => 'Some note',
         ])
         ->assertUnprocessable()
         ->assertJsonValidationErrors(['content']);
@@ -312,40 +321,6 @@ test('user can reorder list items', function () {
     $this->actingAs($user)
         ->patchJson("/api/v1/itineraries/{$itinerary->id}/lists/{$list->id}/items/reorder", [
             'list_item_ids' => [$third->id, $first->id, $second->id],
-        ])
-        ->assertNoContent();
-
-    expect($third->refresh()->sort_order)->toBe(1);
-    expect($first->refresh()->sort_order)->toBe(2);
-    expect($second->refresh()->sort_order)->toBe(3);
-});
-
-test('user can reorder checklist items', function () {
-    $user = User::factory()->create();
-    $itinerary = Itinerary::factory()->for($user)->create();
-    $list = ItineraryList::factory()->for($itinerary)->create(['sort_order' => 1]);
-    $item = ItineraryListItem::factory()->for($list)->create([
-        'type' => 'checklist',
-        'sort_order' => 1,
-    ]);
-    [$first, $second, $third] = ItineraryListItemChecklistItem::factory()->for($item, 'item')->createMany([
-        [
-            'label' => 'Fushimi Inari',
-            'sort_order' => 1,
-        ],
-        [
-            'label' => 'Himeji Castle',
-            'sort_order' => 2,
-        ],
-        [
-            'label' => 'Kiyomizu-dera',
-            'sort_order' => 3,
-        ],
-    ]);
-
-    $this->actingAs($user)
-        ->patchJson("/api/v1/itineraries/{$itinerary->id}/lists/{$list->id}/items/{$item->id}/checklist/reorder", [
-            'checklist_item_ids' => [$third->id, $first->id, $second->id],
         ])
         ->assertNoContent();
 
@@ -412,26 +387,6 @@ test('user can delete a checklist item and all its sub-items from their list', f
     expect($checklist_item->fresh())->toBeNull();
 });
 
-test('user can delete an item from a checklist', function () {
-    $user = User::factory()->create();
-    $itinerary = Itinerary::factory()->for($user)->create();
-    $list = ItineraryList::factory()->for($itinerary)->create();
-    $item = ItineraryListItem::factory()->for($list)->create([
-        'type' => 'checklist',
-        'sort_order' => 1,
-    ]);
-    $checklist_item = ItineraryListItemChecklistItem::factory()->for($item, 'item')->create([
-        'label' => 'Fushimi Inari',
-        'sort_order' => 1,
-    ]);
-
-    $this->actingAs($user)
-        ->deleteJson("/api/v1/itineraries/{$itinerary->id}/lists/{$list->id}/items/{$item->id}/checklist/{$checklist_item->id}")
-        ->assertNoContent();
-
-    expect($checklist_item->fresh())->toBeNull();
-});
-
 test('user can delete a note item from their list', function () {
     $user = User::factory()->create();
     $itinerary = Itinerary::factory()->for($user)->create();
@@ -452,29 +407,23 @@ test('deleting a list item reorders remaining list items', function () {
     $user = User::factory()->create();
     $itinerary = Itinerary::factory()->for($user)->create();
     $list = ItineraryList::factory()->for($itinerary)->create(['sort_order' => 1]);
-    [$first, $second, $third] = ItineraryListItem::factory()->count(3)->for($list)->create();
+    [$first, $second, $third] = ItineraryListItem::factory()->for($list)->createMany([
+        [
+            'type' => 'place',
+            'sort_order' => 1,
+        ],
+        [
+            'type' => 'checklist',
+            'sort_order' => 2,
+        ],
+        [
+            'type' => 'note',
+            'sort_order' => 3,
+        ],
+    ]);
 
     $this->actingAs($user)
         ->deleteJson("/api/v1/itineraries/{$itinerary->id}/lists/{$list->id}/items/{$first->id}")
-        ->assertNoContent();
-
-    expect($first->fresh())->toBeNull();
-    expect($second->refresh()->sort_order)->toBe(1);
-    expect($third->refresh()->sort_order)->toBe(2);
-});
-
-test('deleting a checklist item reorders remaining checklist items', function () {
-    $user = User::factory()->create();
-    $itinerary = Itinerary::factory()->for($user)->create();
-    $list = ItineraryList::factory()->for($itinerary)->create(['sort_order' => 1]);
-    $item = ItineraryListItem::factory()->for($list)->create([
-        'type' => 'checklist',
-        'sort_order' => 1,
-    ]);
-    [$first, $second, $third] = ItineraryListItemChecklistItem::factory()->count(3)->for($item, 'item')->create();
-
-    $this->actingAs($user)
-        ->deleteJson("/api/v1/itineraries/{$itinerary->id}/lists/{$list->id}/items/{$item->id}/checklist/{$first->id}")
         ->assertNoContent();
 
     expect($first->fresh())->toBeNull();

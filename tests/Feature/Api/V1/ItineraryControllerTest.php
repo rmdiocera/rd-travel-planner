@@ -3,6 +3,10 @@
 declare(strict_types=1);
 
 use App\Models\Itinerary;
+use App\Models\ItineraryList;
+use App\Models\ItineraryListItem;
+use App\Models\ItineraryListItemChecklistItem;
+use App\Models\ItinerarySpot;
 use App\Models\User;
 
 test('unauthenticated users cannot access itinerary endpoints', function () {
@@ -119,6 +123,58 @@ test('user can delete their own itinerary', function () {
         ->assertNoContent();
 
     expect($itinerary->fresh())->toBeNull();
+});
+
+test('deleting an itinerary deletes its spots, its lists and the items under those lists', function () {
+    $user = User::factory()->create();
+    $itinerary = Itinerary::factory()->for($user)->create();
+    [$first_spot, $second_spot] = ItinerarySpot::factory()->count(2)->for($itinerary)->create();
+    [$first_list, $second_list, $third_list] = ItineraryList::factory()->count(3)->for($itinerary)->create();
+    [$first_item, $second_item, $third_item] = ItineraryListItem::factory()->for($first_list)->createMany([
+        [
+            'type' => 'place',
+            'sort_order' => 1,
+        ],
+        [
+            'type' => 'checklist',
+            'sort_order' => 2,
+        ],
+        [
+            'type' => 'note',
+            'sort_order' => 3,
+        ],
+    ]);
+    [$first_cl_item, $second_cl_item, $third_cl_item] = ItineraryListItemChecklistItem::factory()->for($second_item, 'item')->createMany([
+        [
+            'label' => 'Fushimi Inari',
+            'sort_order' => 1,
+        ],
+        [
+            'label' => 'Himeji Castle',
+            'sort_order' => 2,
+        ],
+        [
+            'label' => 'Kiyomizu-dera',
+            'sort_order' => 3,
+        ],
+    ]);
+
+    $this->actingAs($user)
+        ->deleteJson("/api/v1/itineraries/{$itinerary->id}")
+        ->assertNoContent();
+
+    expect($itinerary->fresh())->toBeNull();
+    expect($first_spot->fresh())->toBeNull();
+    expect($second_spot->fresh())->toBeNull();
+    expect($first_list->fresh())->toBeNull();
+    expect($second_list->fresh())->toBeNull();
+    expect($third_list->fresh())->toBeNull();
+    expect($first_item->fresh())->toBeNull();
+    expect($second_item->fresh())->toBeNull();
+    expect($third_item->fresh())->toBeNull();
+    expect($first_cl_item->fresh())->toBeNull();
+    expect($second_cl_item->fresh())->toBeNull();
+    expect($third_cl_item->fresh())->toBeNull();
 });
 
 test('user cannot delete another user\'s itinerary', function () {
