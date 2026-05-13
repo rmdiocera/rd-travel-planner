@@ -13,12 +13,13 @@ use App\Models\ItinerarySpot;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\AnonymousResourceCollection;
+use Illuminate\Support\Facades\Gate;
 
 class ItinerarySpotController extends Controller
 {
     public function index(Request $request, Itinerary $itinerary): AnonymousResourceCollection|JsonResponse
     {
-        abort_if($itinerary->user_id !== $request->user()->id, 403);
+        Gate::authorize('viewAny', [ItinerarySpot::class, $itinerary]);
 
         if ($request->group_by_date) {
             $grouped = $itinerary->spots()
@@ -43,7 +44,7 @@ class ItinerarySpotController extends Controller
      */
     public function store(StoreItinerarySpotRequest $request, Itinerary $itinerary): JsonResponse
     {
-        abort_if($itinerary->user_id !== $request->user()->id, 403);
+        Gate::authorize('create', [ItinerarySpot::class, $itinerary]);
 
         $spot = $itinerary->spots()->create($request->validated());
 
@@ -55,8 +56,7 @@ class ItinerarySpotController extends Controller
      */
     public function update(UpdateItinerarySpotRequest $request, Itinerary $itinerary, ItinerarySpot $spot): ItinerarySpotResource
     {
-        abort_if($itinerary->user_id !== $request->user()->id, 403);
-        abort_if($spot->itinerary_id !== $itinerary->id, 404);
+        Gate::authorize('update', [$spot, $itinerary]);
 
         $spot->update($request->validated());
 
@@ -68,8 +68,7 @@ class ItinerarySpotController extends Controller
      */
     public function destroy(Request $request, Itinerary $itinerary, ItinerarySpot $spot): JsonResponse
     {
-        abort_if($itinerary->user_id !== $request->user()->id, 403);
-        abort_if($spot->itinerary_id !== $itinerary->id, 404);
+        Gate::authorize('delete', [$spot, $itinerary]);
 
         $spot->delete();
 

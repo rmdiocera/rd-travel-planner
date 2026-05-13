@@ -10,7 +10,14 @@ use App\Models\ItinerarySpot;
 use App\Models\User;
 
 test('unauthenticated users cannot access itinerary endpoints', function () {
+    $itinerary = Itinerary::factory()->create();
+
     $this->getJson('/api/v1/itineraries')->assertUnauthorized();
+    $this->postJson('/api/v1/itineraries')->assertUnauthorized();
+    $this->getJson("/api/v1/itineraries/{$itinerary->id}")->assertUnauthorized();
+    $this->putJson("/api/v1/itineraries/{$itinerary->id}")->assertUnauthorized();
+    $this->patchJson("/api/v1/itineraries/{$itinerary->id}")->assertUnauthorized();
+    $this->deleteJson("/api/v1/itineraries/{$itinerary->id}")->assertUnauthorized();
 });
 
 test('list returns only the authenticated user\'s itineraries', function () {
@@ -69,6 +76,8 @@ test('user can view their own itinerary', function () {
     $user = User::factory()->create();
     $itinerary = Itinerary::factory()->for($user)->create();
 
+    $this->assertTrue($user->can('view', $itinerary));
+
     $this->actingAs($user)
         ->getJson("/api/v1/itineraries/{$itinerary->id}")
         ->assertOk()
@@ -80,6 +89,8 @@ test('user cannot view another user\'s itinerary', function () {
     $other = User::factory()->create();
     $itinerary = Itinerary::factory()->for($other)->create();
 
+    $this->assertFalse($user->can('view', $itinerary));
+
     $this->actingAs($user)
         ->getJson("/api/v1/itineraries/{$itinerary->id}")
         ->assertForbidden();
@@ -88,6 +99,8 @@ test('user cannot view another user\'s itinerary', function () {
 test('user can update their own itinerary', function () {
     $user = User::factory()->create();
     $itinerary = Itinerary::factory()->for($user)->create();
+
+    $this->assertTrue($user->can('update', $itinerary));
 
     $this->actingAs($user)
         ->putJson("/api/v1/itineraries/{$itinerary->id}", [
@@ -107,6 +120,8 @@ test('user cannot update another user\'s itinerary', function () {
     $other = User::factory()->create();
     $itinerary = Itinerary::factory()->for($other)->create();
 
+    $this->assertFalse($user->can('update', $itinerary));
+
     $this->actingAs($user)
         ->putJson("/api/v1/itineraries/{$itinerary->id}", [
             'name' => 'Hijacked Trip',
@@ -117,6 +132,8 @@ test('user cannot update another user\'s itinerary', function () {
 test('user can delete their own itinerary', function () {
     $user = User::factory()->create();
     $itinerary = Itinerary::factory()->for($user)->create();
+
+    $this->assertTrue($user->can('delete', $itinerary));
 
     $this->actingAs($user)
         ->deleteJson("/api/v1/itineraries/{$itinerary->id}")
@@ -181,6 +198,8 @@ test('user cannot delete another user\'s itinerary', function () {
     $user = User::factory()->create();
     $other = User::factory()->create();
     $itinerary = Itinerary::factory()->for($other)->create();
+
+    $this->assertFalse($user->can('delete', $itinerary));
 
     $this->actingAs($user)
         ->deleteJson("/api/v1/itineraries/{$itinerary->id}")

@@ -14,6 +14,7 @@ use App\Models\ItineraryListItem;
 use App\Models\ItineraryListItemChecklistItem;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Gate;
 
 class ItineraryListItemChecklistItemController extends Controller
 {
@@ -22,7 +23,7 @@ class ItineraryListItemChecklistItemController extends Controller
      */
     public function store(StoreItineraryListItemChecklistItemRequest $request, Itinerary $itinerary, ItineraryList $list, ItineraryListItem $item): JsonResponse
     {
-        abort_if($itinerary->user_id !== $request->user()->id, 403);
+        Gate::authorize('create', [ItineraryListItemChecklistItem::class, $itinerary, $list, $item]);
 
         $checklist_item = $item->checklistItems()->create([
             ...$request->validated(),
@@ -37,7 +38,7 @@ class ItineraryListItemChecklistItemController extends Controller
      */
     public function update(UpdateItineraryListItemChecklistItemRequest $request, Itinerary $itinerary, ItineraryList $list, ItineraryListItem $item, ItineraryListItemChecklistItem $checklistItem): ItineraryListItemChecklistItemResource
     {
-        abort_if($itinerary->user_id !== $request->user()->id, 403);
+        Gate::authorize('update', [$checklistItem, $itinerary, $list, $item]);
 
         $checklistItem->update($request->validated());
 
@@ -49,7 +50,7 @@ class ItineraryListItemChecklistItemController extends Controller
      */
     public function reorder(Request $request, Itinerary $itinerary, ItineraryList $list, ItineraryListItem $item): JsonResponse
     {
-        abort_if($itinerary->user_id !== $request->user()->id, 403);
+        Gate::authorize('reorder', [ItineraryListItemChecklistItem::class, $itinerary, $list, $item]);
 
         $validated = $request->validate([
             'checklist_item_ids' => ['required', 'array'],
@@ -66,7 +67,7 @@ class ItineraryListItemChecklistItemController extends Controller
      */
     public function destroy(Request $request, Itinerary $itinerary, ItineraryList $list, ItineraryListItem $item, ItineraryListItemChecklistItem $checklistItem): JsonResponse
     {
-        abort_if($itinerary->user_id !== $request->user()->id, 403);
+        Gate::authorize('delete', [$checklistItem, $itinerary, $list, $item]);
 
         $checklistItem->delete();
 

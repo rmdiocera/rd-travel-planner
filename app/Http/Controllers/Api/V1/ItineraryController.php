@@ -12,6 +12,7 @@ use App\Models\Itinerary;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\AnonymousResourceCollection;
+use Illuminate\Support\Facades\Gate;
 
 class ItineraryController extends Controller
 {
@@ -40,7 +41,7 @@ class ItineraryController extends Controller
      */
     public function show(Request $request, Itinerary $itinerary): ItineraryResource
     {
-        abort_if($itinerary->user_id !== $request->user()->id, 403);
+        Gate::authorize('view', $itinerary);
 
         return new ItineraryResource($itinerary);
     }
@@ -50,7 +51,7 @@ class ItineraryController extends Controller
      */
     public function update(UpdateItineraryRequest $request, Itinerary $itinerary): ItineraryResource
     {
-        abort_if($itinerary->user_id !== $request->user()->id, 403);
+        Gate::authorize('update', $itinerary);
 
         $itinerary->update($request->validated());
 
@@ -62,7 +63,7 @@ class ItineraryController extends Controller
      */
     public function destroy(Request $request, Itinerary $itinerary): JsonResponse
     {
-        abort_if($itinerary->user_id !== $request->user()->id, 403);
+        Gate::authorize('delete', $itinerary);
 
         $itinerary->delete();
 

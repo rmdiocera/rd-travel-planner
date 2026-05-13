@@ -9,14 +9,21 @@ use App\Models\User;
 
 test('unauthenticated users cannot access spot endpoints', function () {
     $itinerary = Itinerary::factory()->create();
+    $spot = ItinerarySpot::factory()->for($itinerary)->create();
 
     $this->getJson("/api/v1/itineraries/{$itinerary->id}/spots")->assertUnauthorized();
+    $this->postJson("/api/v1/itineraries/{$itinerary->id}/spots")->assertUnauthorized();
+    $this->putJson("/api/v1/itineraries/{$itinerary->id}/spots/{$spot->id}")->assertUnauthorized();
+    $this->patchJson("/api/v1/itineraries/{$itinerary->id}/spots/{$spot->id}")->assertUnauthorized();
+    $this->deleteJson("/api/v1/itineraries/{$itinerary->id}/spots/{$spot->id}")->assertUnauthorized();
 });
 
 test('user can list spots for their itinerary', function () {
     $user = User::factory()->create();
     $itinerary = Itinerary::factory()->for($user)->create();
     ItinerarySpot::factory()->count(3)->for($itinerary)->create();
+
+    $this->assertTrue($user->can('viewAny', [ItinerarySpot::class, $itinerary]));
 
     $this->actingAs($user)
         ->getJson("/api/v1/itineraries/{$itinerary->id}/spots")
@@ -49,6 +56,8 @@ test('user cannot list spots for another user\'s itinerary', function () {
     $other = User::factory()->create();
     $itinerary = Itinerary::factory()->for($other)->create();
 
+    $this->assertFalse($user->can('viewAny', [ItinerarySpot::class, $itinerary]));
+
     $this->actingAs($user)
         ->getJson("/api/v1/itineraries/{$itinerary->id}/spots")
         ->assertForbidden();
@@ -58,6 +67,8 @@ test('user can add a spot to their itinerary', function () {
     $user = User::factory()->create();
     $itinerary = Itinerary::factory()->for($user)->create();
     $place = Place::factory()->create();
+
+    $this->assertTrue($user->can('create', [ItinerarySpot::class, $itinerary]));
 
     $this->actingAs($user)
         ->postJson("/api/v1/itineraries/{$itinerary->id}/spots", [
@@ -101,6 +112,8 @@ test('store forbids adding a spot to another user\'s itinerary', function () {
     $itinerary = Itinerary::factory()->for($other)->create();
     $place = Place::factory()->create();
 
+    $this->assertFalse($user->can('create', [ItinerarySpot::class, $itinerary]));
+
     $this->actingAs($user)
         ->postJson("/api/v1/itineraries/{$itinerary->id}/spots", [
             'place_id' => $place->id,
@@ -117,6 +130,8 @@ test('user can update a spot', function () {
         'visit_date' => '2026-05-01',
         'marked_visited' => false,
     ]);
+
+    $this->assertTrue($user->can('update', [$spot, $itinerary]));
 
     $this->actingAs($user)
         ->putJson("/api/v1/itineraries/{$itinerary->id}/spots/{$spot->id}", [
@@ -136,6 +151,8 @@ test('user cannot update a spot on another user\'s itinerary', function () {
     $place = Place::factory()->create();
     $spot = ItinerarySpot::factory()->for($itinerary)->for($place)->create();
 
+    $this->assertFalse($user->can('update', [$spot, $itinerary]));
+
     $this->actingAs($user)
         ->putJson("/api/v1/itineraries/{$itinerary->id}/spots/{$spot->id}", [
             'visit_date' => '2026-05-10',
@@ -147,6 +164,8 @@ test('user can delete a spot', function () {
     $user = User::factory()->create();
     $itinerary = Itinerary::factory()->for($user)->create();
     $spot = ItinerarySpot::factory()->for($itinerary)->create();
+
+    $this->assertTrue($user->can('delete', [$spot, $itinerary]));
 
     $this->actingAs($user)
         ->deleteJson("/api/v1/itineraries/{$itinerary->id}/spots/{$spot->id}")
@@ -160,6 +179,8 @@ test('user cannot delete a spot on another user\'s itinerary', function () {
     $other = User::factory()->create();
     $itinerary = Itinerary::factory()->for($other)->create();
     $spot = ItinerarySpot::factory()->for($itinerary)->create();
+
+    $this->assertFalse($user->can('delete', [$spot, $itinerary]));
 
     $this->actingAs($user)
         ->deleteJson("/api/v1/itineraries/{$itinerary->id}/spots/{$spot->id}")
