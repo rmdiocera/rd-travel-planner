@@ -13,6 +13,7 @@ use App\Models\ItineraryList;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\AnonymousResourceCollection;
+use Illuminate\Support\Facades\Gate;
 
 class ItineraryListController extends Controller
 {
@@ -21,7 +22,7 @@ class ItineraryListController extends Controller
      */
     public function index(Request $request, Itinerary $itinerary): AnonymousResourceCollection
     {
-        abort_if($itinerary->user_id !== $request->user()->id, 403);
+        Gate::authorize('viewAny', [ItineraryList::class, $itinerary]);
 
         return ItineraryListResource::collection(
             $itinerary->lists()
@@ -44,7 +45,7 @@ class ItineraryListController extends Controller
      */
     public function store(StoreItineraryListRequest $request, Itinerary $itinerary): JsonResponse
     {
-        abort_if($itinerary->user_id !== $request->user()->id, 403);
+        Gate::authorize('viewAny', [ItineraryList::class, $itinerary]);
 
         $list = $itinerary->lists()->create($request->validated() + [
             'sort_order' => $itinerary->lists()->max('sort_order') + 1,
@@ -58,7 +59,7 @@ class ItineraryListController extends Controller
      */
     public function update(UpdateItineraryListRequest $request, Itinerary $itinerary, ItineraryList $list): ItineraryListResource
     {
-        abort_if($itinerary->user_id !== $request->user()->id, 403);
+        Gate::authorize('update', [$list, $itinerary]);
 
         $list->update($request->validated());
 
@@ -67,7 +68,7 @@ class ItineraryListController extends Controller
 
     public function reorder(Request $request, Itinerary $itinerary): JsonResponse
     {
-        abort_if($itinerary->user_id !== $request->user()->id, 403);
+        Gate::authorize('reorder', [ItineraryList::class, $itinerary]);
 
         $validated = $request->validate([
             'list_ids' => ['required', 'array'],
@@ -84,7 +85,7 @@ class ItineraryListController extends Controller
      */
     public function destroy(Request $request, Itinerary $itinerary, ItineraryList $list): JsonResponse
     {
-        abort_if($itinerary->user_id !== $request->user()->id, 403);
+        Gate::authorize('delete', [$list, $itinerary]);
 
         $list->delete();
 

@@ -13,8 +13,13 @@ use App\Models\User;
 test('unauthenticated users cannot access item endpoints', function () {
     $itinerary = Itinerary::factory()->create();
     $list = ItineraryList::factory()->for($itinerary)->create();
+    $item = ItineraryListItem::factory()->for($list)->create();
 
     $this->postJson("/api/v1/itineraries/{$itinerary->id}/lists/{$list->id}/items")->assertUnauthorized();
+    $this->putJson("/api/v1/itineraries/{$itinerary->id}/lists/{$list->id}/items/{$item->id}")->assertUnauthorized();
+    $this->patchJson("/api/v1/itineraries/{$itinerary->id}/lists/{$list->id}/items/{$item->id}")->assertUnauthorized();
+    $this->deleteJson("/api/v1/itineraries/{$itinerary->id}/lists/{$list->id}/items/{$item->id}")->assertUnauthorized();
+    $this->patchJson("/api/v1/itineraries/{$itinerary->id}/lists/{$list->id}/items/reorder")->assertUnauthorized();
 });
 
 test('user can add a place item to their list', function () {
@@ -22,6 +27,8 @@ test('user can add a place item to their list', function () {
     $place = Place::factory()->create();
     $itinerary = Itinerary::factory()->for($user)->create();
     $list = ItineraryList::factory()->for($itinerary)->create(['sort_order' => 1]);
+
+    $this->assertTrue($user->can('create', [ItineraryListItem::class, $itinerary, $list]));
 
     $this->actingAs($user)
         ->postJson("/api/v1/itineraries/{$itinerary->id}/lists/{$list->id}/items", [
@@ -36,10 +43,29 @@ test('user can add a place item to their list', function () {
     expect($list->items()->count())->toBe(1);
 });
 
+test('user cannot add an item to another user\'s list', function () {
+    $user = User::factory()->create();
+    $other = User::factory()->create();
+    $place = Place::factory()->create();
+    $itinerary = Itinerary::factory()->for($other)->create();
+    $list = ItineraryList::factory()->for($itinerary)->create();
+
+    $this->assertFalse($user->can('create', [ItineraryListItem::class, $itinerary, $list]));
+
+    $this->actingAs($user)
+        ->postJson("/api/v1/itineraries/{$itinerary->id}/lists/{$list->id}/items", [
+            'type' => 'place',
+            'place_id' => $place->id,
+        ])
+        ->assertForbidden();
+});
+
 test('user can add a checklist item to their list', function () {
     $user = User::factory()->create();
     $itinerary = Itinerary::factory()->for($user)->create();
     $list = ItineraryList::factory()->for($itinerary)->create(['sort_order' => 1]);
+
+    $this->assertTrue($user->can('create', [ItineraryListItem::class, $itinerary, $list]));
 
     $this->actingAs($user)
         ->postJson("/api/v1/itineraries/{$itinerary->id}/lists/{$list->id}/items", [
@@ -56,6 +82,8 @@ test('user can add a note item to their list', function () {
     $user = User::factory()->create();
     $itinerary = Itinerary::factory()->for($user)->create();
     $list = ItineraryList::factory()->for($itinerary)->create(['sort_order' => 1]);
+
+    $this->assertTrue($user->can('create', [ItineraryListItem::class, $itinerary, $list]));
 
     $this->actingAs($user)
         ->postJson("/api/v1/itineraries/{$itinerary->id}/lists/{$list->id}/items", [
@@ -80,6 +108,8 @@ test('user can update the start time and end time of a place item on their list'
     $place_item = ItineraryListItemPlace::factory()->for($item, 'item')->create([
         'place_id' => $place->id,
     ]);
+
+    $this->assertTrue($user->can('update', [$item, $itinerary, $list]));
 
     $this->actingAs($user)
         ->patchJson("/api/v1/itineraries/{$itinerary->id}/lists/{$list->id}/items/{$item->id}", [
@@ -109,6 +139,8 @@ test('user can toggle marked_visited on a place item', function () {
         'place_id' => $place->id,
     ]);
 
+    $this->assertTrue($user->can('update', [$item, $itinerary, $list]));
+
     $this->actingAs($user)
         ->patchJson("/api/v1/itineraries/{$itinerary->id}/lists/{$list->id}/items/{$item->id}", [
             'type' => 'place',
@@ -129,6 +161,8 @@ test('user can update the title of a checklist on their list', function () {
         'type' => 'checklist',
         'sort_order' => 1,
     ]);
+
+    $this->assertTrue($user->can('update', [$item, $itinerary, $list]));
 
     $this->actingAs($user)
         ->patchJson("/api/v1/itineraries/{$itinerary->id}/lists/{$list->id}/items/{$item->id}", [
@@ -151,6 +185,8 @@ test('user can update the content of a note on their list', function () {
         'sort_order' => 1,
     ]);
 
+    $this->assertTrue($user->can('update', [$item, $itinerary, $list]));
+
     $this->actingAs($user)
         ->patchJson("/api/v1/itineraries/{$itinerary->id}/lists/{$list->id}/items/{$item->id}", [
             'type' => 'note',
@@ -161,6 +197,25 @@ test('user can update the content of a note on their list', function () {
         ->assertJsonPath('data.content', 'Bring sunscreen and umbrella');
 
     expect($item->refresh()->content)->toBe('Bring sunscreen and umbrella');
+});
+
+test('user cannot update an item on another user\'s list', function () {
+    $user = User::factory()->create();
+    $other = User::factory()->create();
+    $place = Place::factory()->create();
+    $itinerary = Itinerary::factory()->for($other)->create();
+    $list = ItineraryList::factory()->for($itinerary)->create();
+    $item = ItineraryListItem::factory()->for($list)->create(['type' => 'place']);
+    ItineraryListItemPlace::factory()->for($item, 'item')->create(['place_id' => $place->id]);
+
+    $this->assertFalse($user->can('update', [$item, $itinerary, $list]));
+
+    $this->actingAs($user)
+        ->patchJson("/api/v1/itineraries/{$itinerary->id}/lists/{$list->id}/items/{$item->id}", [
+            'type' => 'place',
+            'marked_visited' => true,
+        ])
+        ->assertForbidden();
 });
 
 test('start_time and end_time are required when updating a place item without marked_visited', function () {
@@ -318,6 +373,8 @@ test('user can reorder list items', function () {
         'place_id' => $place->id,
     ]);
 
+    $this->assertTrue($user->can('reorder', [ItineraryListItem::class, $itinerary, $list]));
+
     $this->actingAs($user)
         ->patchJson("/api/v1/itineraries/{$itinerary->id}/lists/{$list->id}/items/reorder", [
             'list_item_ids' => [$third->id, $first->id, $second->id],
@@ -327,6 +384,39 @@ test('user can reorder list items', function () {
     expect($third->refresh()->sort_order)->toBe(1);
     expect($first->refresh()->sort_order)->toBe(2);
     expect($second->refresh()->sort_order)->toBe(3);
+});
+
+test('user cannot reorder items on another user\'s list', function () {
+    $user = User::factory()->create();
+    $other = User::factory()->create();
+    $place = Place::factory()->create();
+    $itinerary = Itinerary::factory()->for($other)->create();
+    $list = ItineraryList::factory()->for($itinerary)->create();
+    [$first, $second, $third] = ItineraryListItem::factory()->for($list)->createMany([
+        [
+            'type' => 'place',
+            'sort_order' => 1,
+        ],
+        [
+            'type' => 'checklist',
+            'sort_order' => 2,
+        ],
+        [
+            'type' => 'note',
+            'sort_order' => 3,
+        ],
+    ]);
+    ItineraryListItemPlace::factory()->for($first, 'item')->create([
+        'place_id' => $place->id,
+    ]);
+
+    $this->assertFalse($user->can('reorder', [ItineraryListItem::class, $itinerary, $list]));
+
+    $this->actingAs($user)
+        ->patchJson("/api/v1/itineraries/{$itinerary->id}/lists/{$list->id}/items/reorder", [
+            'list_item_ids' => [$third->id, $first->id, $second->id],
+        ])
+        ->assertForbidden();
 });
 
 test('user can delete a place item from their list', function () {
@@ -341,6 +431,8 @@ test('user can delete a place item from their list', function () {
     $place_item = ItineraryListItemPlace::factory()->for($item, 'item')->create([
         'place_id' => $place->id,
     ]);
+
+    $this->assertTrue($user->can('delete', [$item, $itinerary, $list]));
 
     $this->actingAs($user)
         ->deleteJson("/api/v1/itineraries/{$itinerary->id}/lists/{$list->id}/items/{$item->id}")
@@ -358,6 +450,8 @@ test('user can delete a checklist item from their list', function () {
         'type' => 'checklist',
         'sort_order' => 1,
     ]);
+
+    $this->assertTrue($user->can('delete', [$item, $itinerary, $list]));
 
     $this->actingAs($user)
         ->deleteJson("/api/v1/itineraries/{$itinerary->id}/lists/{$list->id}/items/{$item->id}")
@@ -379,6 +473,8 @@ test('user can delete a checklist item and all its sub-items from their list', f
         'sort_order' => 1,
     ]);
 
+    $this->assertTrue($user->can('delete', [$item, $itinerary, $list]));
+
     $this->actingAs($user)
         ->deleteJson("/api/v1/itineraries/{$itinerary->id}/lists/{$list->id}/items/{$item->id}")
         ->assertNoContent();
@@ -395,6 +491,8 @@ test('user can delete a note item from their list', function () {
         'type' => 'note',
         'sort_order' => 1,
     ]);
+
+    $this->assertTrue($user->can('delete', [$item, $itinerary, $list]));
 
     $this->actingAs($user)
         ->deleteJson("/api/v1/itineraries/{$itinerary->id}/lists/{$list->id}/items/{$item->id}")
@@ -437,6 +535,8 @@ test('user cannot delete an item on another user\'s list', function () {
     $itinerary = Itinerary::factory()->for($other)->create();
     $list = ItineraryList::factory()->for($itinerary)->create();
     $item = ItineraryListItem::factory()->for($list, 'itineraryList')->create();
+
+    $this->assertFalse($user->can('delete', [$item, $itinerary, $list]));
 
     $this->actingAs($user)
         ->deleteJson("/api/v1/itineraries/{$itinerary->id}/lists/{$list->id}/items/{$item->id}")

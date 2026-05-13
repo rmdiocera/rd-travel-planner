@@ -10,14 +10,22 @@ use App\Models\User;
 
 test('unauthenticated users cannot access list endpoints', function () {
     $itinerary = Itinerary::factory()->create();
+    $list = ItineraryList::factory()->for($itinerary)->create();
 
     $this->getJson("/api/v1/itineraries/{$itinerary->id}/lists")->assertUnauthorized();
+    $this->postJson("/api/v1/itineraries/{$itinerary->id}/lists")->assertUnauthorized();
+    $this->putJson("/api/v1/itineraries/{$itinerary->id}/lists/{$list->id}")->assertUnauthorized();
+    $this->patchJson("/api/v1/itineraries/{$itinerary->id}/lists/{$list->id}")->assertUnauthorized();
+    $this->deleteJson("/api/v1/itineraries/{$itinerary->id}/lists/{$list->id}")->assertUnauthorized();
+    $this->patchJson("/api/v1/itineraries/{$itinerary->id}/lists/reorder")->assertUnauthorized();
 });
 
 test('user can list their itinerary\'s lists', function () {
     $user = User::factory()->create();
     $itinerary = Itinerary::factory()->for($user)->create();
     ItineraryList::factory()->count(3)->for($itinerary)->create();
+
+    $this->assertTrue($user->can('viewAny', [ItineraryList::class, $itinerary]));
 
     $this->actingAs($user)
         ->getJson("/api/v1/itineraries/{$itinerary->id}/lists")
@@ -30,6 +38,8 @@ test('user cannot list another user\'s itinerary lists', function () {
     $other = User::factory()->create();
     $itinerary = Itinerary::factory()->for($other)->create();
 
+    $this->assertFalse($user->can('viewAny', [ItineraryList::class, $itinerary]));
+
     $this->actingAs($user)
         ->getJson("/api/v1/itineraries/{$itinerary->id}/lists")
         ->assertForbidden();
@@ -38,6 +48,8 @@ test('user cannot list another user\'s itinerary lists', function () {
 test('user can create a list when no lists exist', function () {
     $user = User::factory()->create();
     $itinerary = Itinerary::factory()->for($user)->create();
+
+    $this->assertTrue($user->can('create', [ItineraryList::class, $itinerary]));
 
     $this->actingAs($user)
         ->postJson("/api/v1/itineraries/{$itinerary->id}/lists", [
@@ -55,6 +67,8 @@ test('user can create a list when lists already exist', function () {
     $user = User::factory()->create();
     $itinerary = Itinerary::factory()->for($user)->create();
     ItineraryList::factory()->for($itinerary)->create(['sort_order' => 1]);
+
+    $this->assertTrue($user->can('create', [ItineraryList::class, $itinerary]));
 
     $this->actingAs($user)
         ->postJson("/api/v1/itineraries/{$itinerary->id}/lists", [
@@ -83,6 +97,8 @@ test('store forbids creating a list on another user\'s itinerary', function () {
     $other = User::factory()->create();
     $itinerary = Itinerary::factory()->for($other)->create();
 
+    $this->assertFalse($user->can('create', [ItineraryList::class, $itinerary]));
+
     $this->actingAs($user)
         ->postJson("/api/v1/itineraries/{$itinerary->id}/lists", [
             'name' => 'Shopping List',
@@ -94,6 +110,8 @@ test('user can update their list', function () {
     $user = User::factory()->create();
     $itinerary = Itinerary::factory()->for($user)->create();
     $list = ItineraryList::factory()->for($itinerary)->create(['name' => 'Old Name']);
+
+    $this->assertTrue($user->can('update', [$list, $itinerary]));
 
     $this->actingAs($user)
         ->putJson("/api/v1/itineraries/{$itinerary->id}/lists/{$list->id}", [
@@ -123,6 +141,8 @@ test('user can reorder lists', function () {
         ],
     ]);
 
+    $this->assertTrue($user->can('reorder', [ItineraryList::class, $itinerary]));
+
     $this->actingAs($user)
         ->patchJson("/api/v1/itineraries/{$itinerary->id}/lists/reorder", [
             'list_ids' => [$third->id, $first->id, $second->id],
@@ -134,11 +154,41 @@ test('user can reorder lists', function () {
     expect($second->refresh()->sort_order)->toBe(3);
 });
 
+test('user cannot reorder another user\'s itinerary lists', function () {
+    $user = User::factory()->create();
+    $other = User::factory()->create();
+    $itinerary = Itinerary::factory()->for($other)->create();
+    [$first, $second, $third] = ItineraryList::factory()->for($itinerary)->createMany([
+        [
+            'name' => 'Places to Visit',
+            'sort_order' => 1,
+        ],
+        [
+            'name' => 'Things to Buy',
+            'sort_order' => 2,
+        ],
+        [
+            'name' => 'Things to Bring',
+            'sort_order' => 3,
+        ],
+    ]);
+
+    $this->assertFalse($user->can('reorder', [ItineraryList::class, $itinerary]));
+
+    $this->actingAs($user)
+        ->patchJson("/api/v1/itineraries/{$itinerary->id}/lists/reorder", [
+            'list_ids' => [$third->id, $first->id, $second->id],
+        ])
+        ->assertForbidden();
+});
+
 test('user cannot update a list on another user\'s itinerary', function () {
     $user = User::factory()->create();
     $other = User::factory()->create();
     $itinerary = Itinerary::factory()->for($other)->create();
     $list = ItineraryList::factory()->for($itinerary)->create();
+
+    $this->assertFalse($user->can('update', [$list, $itinerary]));
 
     $this->actingAs($user)
         ->putJson("/api/v1/itineraries/{$itinerary->id}/lists/{$list->id}", [
@@ -151,6 +201,8 @@ test('user can delete their list', function () {
     $user = User::factory()->create();
     $itinerary = Itinerary::factory()->for($user)->create();
     $list = ItineraryList::factory()->for($itinerary)->create();
+
+    $this->assertTrue($user->can('delete', [$list, $itinerary]));
 
     $this->actingAs($user)
         ->deleteJson("/api/v1/itineraries/{$itinerary->id}/lists/{$list->id}")
@@ -236,6 +288,8 @@ test('user cannot delete a list on another user\'s itinerary', function () {
     $other = User::factory()->create();
     $itinerary = Itinerary::factory()->for($other)->create();
     $list = ItineraryList::factory()->for($itinerary)->create();
+
+    $this->assertFalse($user->can('delete', [$list, $itinerary]));
 
     $this->actingAs($user)
         ->deleteJson("/api/v1/itineraries/{$itinerary->id}/lists/{$list->id}")

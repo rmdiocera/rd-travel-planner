@@ -14,6 +14,7 @@ use App\Models\ItineraryList;
 use App\Models\ItineraryListItem;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Gate;
 
 class ItineraryListItemController extends Controller
 {
@@ -22,7 +23,7 @@ class ItineraryListItemController extends Controller
      */
     public function store(StoreItineraryListItemRequest $request, Itinerary $itinerary, ItineraryList $list): JsonResponse
     {
-        abort_if($itinerary->user_id !== $request->user()->id, 403);
+        Gate::authorize('create', [ItineraryListItem::class, $itinerary, $list]);
 
         $item = $list->items()->create($request->validated() + [
             'sort_order' => $list->items()->max('sort_order') + 1,
@@ -43,7 +44,7 @@ class ItineraryListItemController extends Controller
      */
     public function update(UpdateItineraryListItemRequest $request, Itinerary $itinerary, ItineraryList $list, ItineraryListItem $item): ItineraryListItemResource
     {
-        abort_if($itinerary->user_id !== $request->user()->id, 403);
+        Gate::authorize('update', [$item, $itinerary, $list]);
 
         match ($item->type) {
             ItineraryListItemType::Place => $this->updatePlace($item, $request),
@@ -59,7 +60,7 @@ class ItineraryListItemController extends Controller
      */
     public function reorderListItems(Request $request, Itinerary $itinerary, ItineraryList $list): JsonResponse
     {
-        abort_if($itinerary->user_id !== $request->user()->id, 403);
+        Gate::authorize('reorder', [ItineraryListItem::class, $itinerary, $list]);
 
         $validated = $request->validate([
             'list_item_ids' => ['required', 'array'],
@@ -76,8 +77,7 @@ class ItineraryListItemController extends Controller
      */
     public function destroy(Request $request, Itinerary $itinerary, ItineraryList $list, ItineraryListItem $item): JsonResponse
     {
-        abort_if($itinerary->user_id !== $request->user()->id, 403);
-        abort_if($item->itinerary_lists_id !== $list->id, 404);
+        Gate::authorize('delete', [$item, $itinerary, $list]);
 
         $item->delete();
 
