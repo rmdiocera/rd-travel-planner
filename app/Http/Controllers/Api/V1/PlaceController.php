@@ -29,7 +29,7 @@ class PlaceController extends Controller
             foreach ($request->file('images') as $image) {
                 $path = $image->store('places', 'images');
                 $place->images()->create([
-                    'path' => $path
+                    'path' => $path,
                 ]);
             }
         }
