@@ -5,6 +5,8 @@ declare(strict_types=1);
 use App\Models\Place;
 use App\Models\Tag;
 use App\Models\User;
+use Illuminate\Http\UploadedFile;
+use Illuminate\Support\Facades\Storage;
 
 test('unauthenticated users cannot access the places index', function () {
     $this->getJson('/api/v1/places')->assertUnauthorized();
@@ -65,6 +67,78 @@ test('store validates required fields', function () {
         ->postJson('/api/v1/places', [])
         ->assertUnprocessable()
         ->assertJsonValidationErrors(['name', 'details', 'address', 'country', 'city']);
+});
+
+test('authenticated user can create a place without images', function () {
+    $user = User::factory()->create();
+
+    $response = $this->actingAs($user)->postJson('/api/v1/places', [
+        'name' => 'Eiffel Tower',
+        'details' => 'Famous iron lattice tower in Paris.',
+        'address' => 'Champ de Mars, 5 Av. Anatole France, 75007 Paris',
+        'country' => 'France',
+        'city' => 'Paris',
+        'website' => 'https://www.toureiffel.paris',
+        'phone' => null,
+    ]);
+
+    $response->assertCreated();
+    $response->assertJsonPath('data.name', 'Eiffel Tower');
+    $response->assertJsonCount(0, 'data.images');
+
+    expect(Place::where('name', 'Eiffel Tower')->exists())->toBeTrue();
+});
+
+test('authenticated user can create a place with images', function () {
+    $user = User::factory()->create();
+    
+    Storage::fake('images');
+
+    $place_images = [
+        UploadedFile::fake()->image('place_img1.jpg', "800", "800"),
+        UploadedFile::fake()->image('place_img2.png', "1024", "768"),
+        UploadedFile::fake()->image('place_img3.webp', "1280", "1024"),
+    ];
+
+    $response = $this->actingAs($user)->postJson('/api/v1/places', [
+        'name' => 'Eiffel Tower',
+        'details' => 'Famous iron lattice tower in Paris.',
+        'address' => 'Champ de Mars, 5 Av. Anatole France, 75007 Paris',
+        'country' => 'France',
+        'city' => 'Paris',
+        'website' => 'https://www.toureiffel.paris',
+        'phone' => null,
+        'images' => $place_images,
+    ]);
+
+    $response->assertCreated();
+    $response->assertJsonPath('data.name', 'Eiffel Tower');
+    $response->assertJsonCount(3, 'data.images');
+    
+    foreach ($response->json('data.images') as $image) {
+        Storage::disk('images')->assertExists($image['path']);
+    }
+});
+
+test('store returns validation errors if uploaded file is not a valid image', function () {
+    $user = User::factory()->create();
+    
+    Storage::fake('images');
+
+    $wrong_file = UploadedFile::fake()->create('wrong_file.pdf', "2048");
+
+    $this->actingAs($user)->postJson('/api/v1/places', [
+        'name' => 'Eiffel Tower',
+        'details' => 'Famous iron lattice tower in Paris.',
+        'address' => 'Champ de Mars, 5 Av. Anatole France, 75007 Paris',
+        'country' => 'France',
+        'city' => 'Paris',
+        'website' => 'https://www.toureiffel.paris',
+        'phone' => null,
+        'images' => $wrong_file,
+    ])
+    ->assertUnprocessable()
+    ->assertJsonValidationErrors(['images']);
 });
 
 test('store rejects a duplicate place name', function () {

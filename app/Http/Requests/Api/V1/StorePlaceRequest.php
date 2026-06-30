@@ -29,6 +29,8 @@ class StorePlaceRequest extends FormRequest
             'image' => ['nullable', 'string'],
             'tags' => ['nullable', 'array'],
             'tags.*' => ['integer', 'exists:tags,id', 'distinct'],
+            'images' => ['sometimes', 'array'],
+            'images.*' => ['image', 'mimes:jpeg,png,webp', 'max:5120', 'dimensions:min_width=200,min_height=200']
         ];
     }
 }

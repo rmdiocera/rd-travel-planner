@@ -25,8 +25,8 @@ class PlaceResource extends JsonResource
             'city' => $this->city,
             'website' => $this->website,
             'phone' => $this->phone,
-            'image' => $this->image,
-            'tags' => TagResource::collection($this->tags),
+            'images' => PlaceImageResource::collection($this->whenLoaded('images')),
+            'tags' => TagResource::collection($this->whenLoaded('tags')),
             'created_at' => $this->created_at,
             'updated_at' => $this->updated_at,
         ];
