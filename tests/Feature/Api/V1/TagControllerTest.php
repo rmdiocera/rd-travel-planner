@@ -5,11 +5,11 @@ declare(strict_types=1);
 use App\Models\Tag;
 use App\Models\User;
 
-test('unauthenticated users cannot access the places index', function () {
+test('unauthenticated users cannot access the tags index', function () {
     $this->getJson('/api/v1/tags')->assertUnauthorized();
 });
 
-test('authenticated user can list all places', function () {
+test('authenticated user can list all tags', function () {
     $user = User::factory()->create();
     Tag::factory()->count(3)->create();
 
