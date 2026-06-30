@@ -25,11 +25,20 @@ class PlaceController extends Controller
 
         $place = Place::create($request->safe()->except(['tags']));
 
+        if ($request->hasFile('images')) {
+            foreach ($request->file('images') as $image) {
+                $path = $image->store('places', 'images');
+                $place->images()->create([
+                    'path' => $path
+                ]);
+            }
+        }
+
         if (! empty($validated['tags'])) {
             $place->tags()->attach($validated['tags']);
         }
 
-        return (new PlaceResource($place->load('tags')))->response()->setStatusCode(201);
+        return (new PlaceResource($place->load('images', 'tags')))->response()->setStatusCode(201);
     }
 
     public function show(Place $place): PlaceResource

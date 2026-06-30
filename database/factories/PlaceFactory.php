@@ -26,7 +26,6 @@ class PlaceFactory extends Factory
             'city' => fake()->city(),
             'website' => fake()->optional()->url(),
             'phone' => fake()->optional()->phoneNumber(),
-            'image' => fake()->optional()->imageUrl(),
         ];
     }
 }

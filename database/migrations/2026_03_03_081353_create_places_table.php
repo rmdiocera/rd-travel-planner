@@ -22,7 +22,6 @@ return new class extends Migration
             $table->string('city');
             $table->string('website')->nullable();
             $table->string('phone', 20)->nullable();
-            $table->text('image')->nullable();
             $table->timestamps();
         });
     }
