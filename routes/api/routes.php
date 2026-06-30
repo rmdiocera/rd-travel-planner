@@ -10,5 +10,6 @@ Route::prefix('v1')->name('api.v1.')->group(function (): void {
     Route::middleware('auth:sanctum')->group(function (): void {
         require __DIR__.'/v1/places.php';
         require __DIR__.'/v1/itineraries.php';
+        require __DIR__.'/v1/tags.php';
     });
 });

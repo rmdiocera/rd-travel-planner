@@ -91,13 +91,13 @@ test('authenticated user can create a place without images', function () {
 
 test('authenticated user can create a place with images', function () {
     $user = User::factory()->create();
-    
+
     Storage::fake('images');
 
     $place_images = [
-        UploadedFile::fake()->image('place_img1.jpg', "800", "800"),
-        UploadedFile::fake()->image('place_img2.png', "1024", "768"),
-        UploadedFile::fake()->image('place_img3.webp', "1280", "1024"),
+        UploadedFile::fake()->image('place_img1.jpg', '800', '800'),
+        UploadedFile::fake()->image('place_img2.png', '1024', '768'),
+        UploadedFile::fake()->image('place_img3.webp', '1280', '1024'),
     ];
 
     $response = $this->actingAs($user)->postJson('/api/v1/places', [
@@ -114,7 +114,7 @@ test('authenticated user can create a place with images', function () {
     $response->assertCreated();
     $response->assertJsonPath('data.name', 'Eiffel Tower');
     $response->assertJsonCount(3, 'data.images');
-    
+
     foreach ($response->json('data.images') as $image) {
         Storage::disk('images')->assertExists($image['path']);
     }
@@ -122,10 +122,10 @@ test('authenticated user can create a place with images', function () {
 
 test('store returns validation errors if uploaded file is not a valid image', function () {
     $user = User::factory()->create();
-    
+
     Storage::fake('images');
 
-    $wrong_file = UploadedFile::fake()->create('wrong_file.pdf', "2048");
+    $wrong_file = UploadedFile::fake()->create('wrong_file.pdf', '2048');
 
     $this->actingAs($user)->postJson('/api/v1/places', [
         'name' => 'Eiffel Tower',
@@ -137,8 +137,8 @@ test('store returns validation errors if uploaded file is not a valid image', fu
         'phone' => null,
         'images' => $wrong_file,
     ])
-    ->assertUnprocessable()
-    ->assertJsonValidationErrors(['images']);
+        ->assertUnprocessable()
+        ->assertJsonValidationErrors(['images']);
 });
 
 test('store rejects a duplicate place name', function () {
