@@ -19,8 +19,34 @@ class ItineraryController extends Controller
     /**
      * Return a listing of the authenticated user's itineraries.
      */
-    public function index(Request $request): AnonymousResourceCollection
+    public function index(Request $request): AnonymousResourceCollection|JsonResponse
     {
+        if ($request->grouped) {
+            $itineraries = $request->user()
+                ->itineraries()
+                ->get();
+
+            $grouped = $itineraries->groupBy(function ($itinerary) {
+                if ($itinerary->end_date->lt(today())) {
+                    return 'past';
+                }
+
+                else if ($itinerary->start_date->lte(today()) && $itinerary->end_date->gte(today())) {
+                    return 'ongoing';
+                }
+
+                return 'upcoming';
+            });
+
+            return response()->json([
+                'data' => [
+                    'past' => ItineraryResource::collection($grouped->get('past', collect())),
+                    'ongoing' => ItineraryResource::collection($grouped->get('ongoing', collect())),
+                    'upcoming' => ItineraryResource::collection($grouped->get('upcoming', collect())),
+                ]
+            ]);
+        }
+
         return ItineraryResource::collection(
             $request->user()->itineraries()->latest()->get()
         );
