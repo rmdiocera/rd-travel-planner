@@ -20,7 +20,7 @@ test('unauthenticated users cannot access itinerary endpoints', function () {
     $this->deleteJson("/api/v1/itineraries/{$itinerary->id}")->assertUnauthorized();
 });
 
-test('list returns only the authenticated user\'s itineraries', function () {
+test('it returns the authenticated user\'s itineraries', function () {
     $user = User::factory()->create();
     $other = User::factory()->create();
 
@@ -31,6 +31,36 @@ test('list returns only the authenticated user\'s itineraries', function () {
         ->getJson('/api/v1/itineraries')
         ->assertOk()
         ->assertJsonCount(3, 'data');
+});
+
+test('it is grouped based on its dates by past, ongoing, and upcoming itineraries', function () {
+    $user = User::factory()->create();    
+
+    Itinerary::factory()->for($user)->createMany([
+        [
+            'start_date' => '2026-03-15',
+            'end_date' => '2026-03-27',
+        ],
+        [
+            'start_date' => fake()->dateTimeBetween('-1 week', 'now'),
+            'end_date' => fake()->dateTimeBetween('now', '+2 weeks'),
+        ],
+        [
+            'start_date' => fake()->dateTimeBetween('+2 months', '+3 months'),
+            'end_date' => fake()->dateTimeBetween('+3 months', '+4 months'),
+        ],
+    ]);
+
+    $response = $this->actingAs($user)
+        ->getJson('/api/v1/itineraries?grouped=true')
+        ->assertJsonCount(1, 'data.past')
+        ->assertJsonCount(1, 'data.ongoing')
+        ->assertJsonCount(1, 'data.upcoming');
+
+    expect($response->json('data.past.0.end_date'))->toBeLessThan(today()->toDateString());
+    expect($response->json('data.ongoing.0.start_date'))->toBeLessThanOrEqual(today()->toDateString());
+    expect($response->json('data.ongoing.0.end_date'))->toBeGreaterThanOrEqual(today()->toDateString());
+    expect($response->json('data.upcoming.0.start_date'))->toBeGreaterThan(today()->toDateString());
 });
 
 test('user can create an itinerary', function () {
