@@ -9,7 +9,7 @@ services:
     volumes:
       - .:/var/www/html
     environment:
-      SSL_MODE: "full"
+      SSL_MODE: "off"
       PHP_OPCACHE_ENABLE: "1"
     depends_on:
       - mariadb
@@ -32,9 +32,15 @@ services:
       - redis_data:/data
 
   adminer:
-    image: adminer
+    image: adminer:4.8.1
     ports:
       - 8080:8080
+
+  mailhog:
+    image: mailhog/mailhog
+    ports:
+      - 1025:1025
+      - 8025:8025
 
 volumes:
   db_data:

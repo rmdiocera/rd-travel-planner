@@ -16,11 +16,13 @@ class UserSeeder extends Seeder
     {
         User::factory()->createMany([
             [
-                'name' => 'Test User',
+                'first_name' => 'Test',
+                'last_name' => 'User',
                 'email' => 'test@example.com',
             ],
             [
-                'name' => 'Test User 2',
+                'first_name' => 'Test',
+                'last_name' => 'User 2',
                 'email' => 'test2@example.com',
             ],
         ]);
