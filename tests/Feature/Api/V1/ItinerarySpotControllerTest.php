@@ -51,6 +51,21 @@ test('spots grouped by visit_date are keyed by date with spots ordered by start_
     expect($data['2026-06-10'])->toHaveCount(1);
 });
 
+test('grouped spots list every visit to the same place', function () {
+    $user = User::factory()->create();
+    $itinerary = Itinerary::factory()->for($user)->create();
+    $place = Place::factory()->create();
+    ItinerarySpot::factory()->count(2)->for($itinerary)->for($place)->create(['visit_date' => '2026-06-09']);
+
+    $data = $this->actingAs($user)
+        ->getJson("/api/v1/itineraries/{$itinerary->id}/spots?group_by_date=true")
+        ->assertOk()
+        ->json('data');
+
+    expect($data['2026-06-09'])->toHaveCount(2);
+    expect(array_column($data['2026-06-09'], 'place_id'))->toBe([$place->id, $place->id]);
+});
+
 test('user cannot list spots for another user\'s itinerary', function () {
     $user = User::factory()->create();
     $other = User::factory()->create();
@@ -81,16 +96,33 @@ test('user can add a spot to their itinerary', function () {
     expect($itinerary->spots()->count())->toBe(1);
 });
 
-test('store rejects a duplicate place in the same itinerary', function () {
+test('store allows the same place to be added to an itinerary more than once', function () {
     $user = User::factory()->create();
     $itinerary = Itinerary::factory()->for($user)->create();
     $place = Place::factory()->create();
-    ItinerarySpot::factory()->for($itinerary)->for($place)->create();
+    ItinerarySpot::factory()->for($itinerary)->for($place)->create(['visit_date' => '2026-05-01']);
+
+    foreach (['2026-05-01', '2026-05-02'] as $visit_date) {
+        $this->actingAs($user)
+            ->postJson("/api/v1/itineraries/{$itinerary->id}/spots", [
+                'place_id' => $place->id,
+                'visit_date' => $visit_date,
+            ])
+            ->assertCreated()
+            ->assertJsonPath('data.place_id', $place->id);
+    }
+
+    expect($itinerary->spots()->where('place_id', $place->id)->count())->toBe(3);
+});
+
+test('store rejects a place that does not exist', function () {
+    $user = User::factory()->create();
+    $itinerary = Itinerary::factory()->for($user)->create();
 
     $this->actingAs($user)
         ->postJson("/api/v1/itineraries/{$itinerary->id}/spots", [
-            'place_id' => $place->id,
-            'visit_date' => '2026-05-02',
+            'place_id' => '01ARZ3NDEKTSV4RRFFQ69G5FAV',
+            'visit_date' => '2026-05-01',
         ])
         ->assertUnprocessable()
         ->assertJsonValidationErrors(['place_id']);
@@ -172,6 +204,20 @@ test('user can delete a spot', function () {
         ->assertNoContent();
 
     expect($spot->fresh())->toBeNull();
+});
+
+test('deleting one visit to a place keeps the other visits', function () {
+    $user = User::factory()->create();
+    $itinerary = Itinerary::factory()->for($user)->create();
+    $place = Place::factory()->create();
+    [$first_visit, $second_visit] = ItinerarySpot::factory()->count(2)->for($itinerary)->for($place)->create();
+
+    $this->actingAs($user)
+        ->deleteJson("/api/v1/itineraries/{$itinerary->id}/spots/{$first_visit->id}")
+        ->assertNoContent();
+
+    expect($first_visit->fresh())->toBeNull();
+    expect($second_visit->fresh())->not->toBeNull();
 });
 
 test('user cannot delete a spot on another user\'s itinerary', function () {
