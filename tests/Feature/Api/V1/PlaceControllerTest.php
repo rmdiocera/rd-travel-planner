@@ -5,6 +5,7 @@ declare(strict_types=1);
 use App\Models\Place;
 use App\Models\Tag;
 use App\Models\User;
+use Illuminate\Database\Eloquent\Factories\Sequence;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Storage;
 
@@ -20,6 +21,143 @@ test('authenticated user can list all places', function () {
         ->getJson('/api/v1/places')
         ->assertOk()
         ->assertJsonCount(3, 'data');
+});
+
+test('index without a search term still lists every place, newest first', function () {
+    $user = User::factory()->create();
+    Place::factory()->count(10)->create();
+    $newest = Place::factory()->create(['created_at' => now()->addMinute()]);
+
+    foreach (['/api/v1/places', '/api/v1/places?search=', '/api/v1/places?search=%20%20'] as $url) {
+        $this->actingAs($user)
+            ->getJson($url)
+            ->assertOk()
+            ->assertJsonCount(Place::count(), 'data')
+            ->assertJsonPath('data.0.id', $newest->id);
+    }
+});
+
+test('search matches places by name or city', function () {
+    $user = User::factory()->create();
+    Place::factory()->create(['name' => 'Zqx Lantern Museum', 'city' => 'Elsewhere']);
+    Place::factory()->create(['name' => 'Driftwood Harbor Park', 'city' => 'Zqxville']);
+    Place::factory()->create(['name' => 'Quiet Garden', 'city' => 'Elsewhere']);
+
+    $this->actingAs($user)
+        ->getJson('/api/v1/places?search=zqx')
+        ->assertOk()
+        ->assertJsonCount(2, 'data')
+        ->assertJsonStructure(['data' => [['id', 'name', 'city', 'tags']]])
+        ->assertJsonMissing(['name' => 'Quiet Garden']);
+});
+
+test('search is case and accent insensitive', function () {
+    $user = User::factory()->create();
+    Place::factory()->create(['name' => 'Café Zqx']);
+    Place::factory()->create(['name' => 'Zqx Bakery']);
+
+    $this->actingAs($user)
+        ->getJson('/api/v1/places?search=CAFE%20ZQX')
+        ->assertOk()
+        ->assertJsonCount(1, 'data')
+        ->assertJsonPath('data.0.name', 'Café Zqx');
+});
+
+test('search requires every word to match the name or the city, in any order', function () {
+    $user = User::factory()->create();
+    Place::factory()->create(['name' => 'Zqx Castle', 'city' => 'Qwvton']);
+    Place::factory()->create(['name' => 'Zqx Moat', 'city' => 'Qwvton']);
+
+    $this->actingAs($user)
+        ->getJson('/api/v1/places?search=qwvton%20castle')
+        ->assertOk()
+        ->assertJsonCount(1, 'data')
+        ->assertJsonPath('data.0.name', 'Zqx Castle');
+});
+
+test('search ranks name prefix matches, then name matches, then city matches', function () {
+    $user = User::factory()->create();
+    Place::factory()->create(['name' => 'Driftwood Pier', 'city' => 'Zqxville']);
+    Place::factory()->create(['name' => 'Museum of Zqx', 'city' => 'Elsewhere']);
+    Place::factory()->create(['name' => 'Zqx Tower', 'city' => 'Elsewhere']);
+    Place::factory()->create(['name' => 'Zqx Arcade', 'city' => 'Elsewhere']);
+    Place::factory()->create(['name' => 'Quiet Garden', 'city' => 'Elsewhere']);
+
+    $response = $this->actingAs($user)
+        ->getJson('/api/v1/places?search=zqx')
+        ->assertOk();
+
+    expect($response->json('data.*.name'))
+        ->toBe(['Zqx Arcade', 'Zqx Tower', 'Museum of Zqx', 'Driftwood Pier']);
+});
+
+test('search returns at most 10 places', function () {
+    $user = User::factory()->create();
+    Place::factory()
+        ->count(12)
+        ->sequence(fn (Sequence $sequence) => ['name' => "Zqx Stall {$sequence->index}"])
+        ->create();
+
+    $this->actingAs($user)
+        ->getJson('/api/v1/places?search=zqx%20stall')
+        ->assertOk()
+        ->assertJsonCount(10, 'data');
+});
+
+test('search with no matches returns an empty data array', function () {
+    $user = User::factory()->create();
+    Place::factory()->create(['name' => 'Zqx Lantern Museum']);
+
+    $this->actingAs($user)
+        ->getJson('/api/v1/places?search=zqx-no-such-place')
+        ->assertOk()
+        ->assertExactJson(['data' => []]);
+});
+
+test('search treats percent and underscore literally', function () {
+    $user = User::factory()->create();
+    Place::factory()->create(['name' => 'Zqx 100% Juice']);
+    Place::factory()->create(['name' => 'Zqx 1000 Lanterns']);
+    Place::factory()->create(['name' => 'Zqx A_B Cafe']);
+    Place::factory()->create(['name' => 'Zqx AxB Cafe']);
+
+    $this->actingAs($user)
+        ->getJson('/api/v1/places?search='.urlencode('100%'))
+        ->assertOk()
+        ->assertJsonCount(1, 'data')
+        ->assertJsonPath('data.0.name', 'Zqx 100% Juice');
+
+    $this->actingAs($user)
+        ->getJson('/api/v1/places?search=a_b')
+        ->assertOk()
+        ->assertJsonCount(1, 'data')
+        ->assertJsonPath('data.0.name', 'Zqx A_B Cafe');
+});
+
+test('search for 0 searches instead of listing every place', function () {
+    $user = User::factory()->create();
+    Place::factory()->create(['name' => 'Zqx Pier 0']);
+    Place::factory()->create(['name' => 'Zqx Garden']);
+
+    $this->actingAs($user)
+        ->getJson('/api/v1/places?search=0')
+        ->assertOk()
+        ->assertJsonFragment(['name' => 'Zqx Pier 0'])
+        ->assertJsonMissing(['name' => 'Zqx Garden']);
+});
+
+test('search must be a string of at most 100 characters', function () {
+    $user = User::factory()->create();
+
+    $this->actingAs($user)
+        ->getJson('/api/v1/places?search[]=zqx')
+        ->assertUnprocessable()
+        ->assertJsonValidationErrors('search');
+
+    $this->actingAs($user)
+        ->getJson('/api/v1/places?search='.str_repeat('a', 101))
+        ->assertUnprocessable()
+        ->assertJsonValidationErrors('search');
 });
 
 test('authenticated user can create a place without tags', function () {

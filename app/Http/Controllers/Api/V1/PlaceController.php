@@ -5,18 +5,31 @@ declare(strict_types=1);
 namespace App\Http\Controllers\Api\V1;
 
 use App\Http\Controllers\Controller;
+use App\Http\Requests\Api\V1\IndexPlaceRequest;
 use App\Http\Requests\Api\V1\StorePlaceRequest;
 use App\Http\Requests\Api\V1\UpdatePlaceRequest;
 use App\Http\Resources\PlaceResource;
 use App\Models\Place;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Resources\Json\AnonymousResourceCollection;
 
 class PlaceController extends Controller
 {
-    public function index(): AnonymousResourceCollection
+    public function index(IndexPlaceRequest $request): AnonymousResourceCollection
     {
-        return PlaceResource::collection(Place::query()->with('tags')->latest()->get());
+        $search = $request->validated('search');
+
+        $places = Place::query()
+            ->with('tags')
+            ->when(
+                filled($search),
+                fn (Builder $query) => $query->search($search)->limit(10),
+                fn (Builder $query) => $query->latest(),
+            )
+            ->get();
+
+        return PlaceResource::collection($places);
     }
 
     public function store(StorePlaceRequest $request): JsonResponse
