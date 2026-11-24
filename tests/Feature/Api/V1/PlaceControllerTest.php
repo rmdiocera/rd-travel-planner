@@ -160,6 +160,15 @@ test('search must be a string of at most 100 characters', function () {
         ->assertJsonValidationErrors('search');
 });
 
+test('search must be valid UTF-8', function () {
+    $user = User::factory()->create();
+
+    $this->actingAs($user)
+        ->getJson('/api/v1/places?search=caf%E9')
+        ->assertUnprocessable()
+        ->assertJsonValidationErrors('search');
+});
+
 test('authenticated user can create a place without tags', function () {
     $user = User::factory()->create();
 
