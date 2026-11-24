@@ -6,7 +6,6 @@ namespace App\Http\Requests\Api\V1;
 
 use Illuminate\Contracts\Validation\ValidationRule;
 use Illuminate\Foundation\Http\FormRequest;
-use Illuminate\Validation\Rule;
 
 class StoreItinerarySpotRequest extends FormRequest
 {
@@ -18,12 +17,7 @@ class StoreItinerarySpotRequest extends FormRequest
     public function rules(): array
     {
         return [
-            'place_id' => [
-                'required',
-                'string',
-                'exists:places,id',
-                Rule::unique('itinerary_spots')->where('itinerary_id', $this->route('itinerary')->id),
-            ],
+            'place_id' => ['required', 'string', 'exists:places,id'],
             'visit_date' => ['required', 'date'],
         ];
     }
