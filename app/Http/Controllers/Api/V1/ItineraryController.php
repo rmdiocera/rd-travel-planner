@@ -27,11 +27,13 @@ class ItineraryController extends Controller
                 ->get();
 
             $grouped = $itineraries->groupBy(function ($itinerary) {
-                if ($itinerary->end_date->lt(today())) {
-                    return 'past';
+                if ($itinerary->start_date === null || $itinerary->end_date === null) {
+                    return 'unscheduled';
                 }
 
-                else if ($itinerary->start_date->lte(today()) && $itinerary->end_date->gte(today())) {
+                if ($itinerary->end_date->lt(today())) {
+                    return 'past';
+                } elseif ($itinerary->start_date->lte(today()) && $itinerary->end_date->gte(today())) {
                     return 'ongoing';
                 }
 
@@ -40,10 +42,13 @@ class ItineraryController extends Controller
 
             return response()->json([
                 'data' => [
-                    'past' => ItineraryResource::collection($grouped->get('past', collect())),
                     'ongoing' => ItineraryResource::collection($grouped->get('ongoing', collect())),
                     'upcoming' => ItineraryResource::collection($grouped->get('upcoming', collect())),
-                ]
+                    'unscheduled' => ItineraryResource::collection(
+                        $grouped->get('unscheduled', collect())->sortBy([['created_at', 'desc'], ['id', 'desc']])
+                    ),
+                    'past' => ItineraryResource::collection($grouped->get('past', collect())),
+                ],
             ]);
         }
 
