@@ -25,7 +25,7 @@ class ItinerarySpotController extends Controller
             $grouped = $itinerary->spots()
                 ->with('place')
                 ->orderBy('visit_date')
-                ->orderBy('start_time')
+                ->orderBy('sort_order')
                 ->get()
                 ->groupBy(fn (ItinerarySpot $spot) => $spot->visit_date->toDateString());
 
@@ -46,9 +46,11 @@ class ItinerarySpotController extends Controller
     {
         Gate::authorize('create', [ItinerarySpot::class, $itinerary]);
 
-        $spot = $itinerary->spots()->create($request->validated());
+        $spot = $itinerary->spots()->make($request->validated());
+        $spot->sort_order = $itinerary->nextSpotSortOrder($spot->visit_date->toDateString());
+        $spot->save();
 
-        return (new ItinerarySpotResource($spot->load('place')))->response()->setStatusCode(201);
+        return (new ItinerarySpotResource($spot->refresh()->load('place')))->response()->setStatusCode(201);
     }
 
     /**
@@ -58,9 +60,21 @@ class ItinerarySpotController extends Controller
     {
         Gate::authorize('update', [$spot, $itinerary]);
 
-        $spot->update($request->validated());
+        $previous_visit_date = $spot->visit_date->toDateString();
+        $spot->fill($request->validated());
+        $is_moving_day = $spot->visit_date->toDateString() !== $previous_visit_date;
 
-        return new ItinerarySpotResource($spot->load('place'));
+        if ($is_moving_day) {
+            $spot->sort_order = $itinerary->nextSpotSortOrder($spot->visit_date->toDateString());
+        }
+
+        $spot->save();
+
+        if ($is_moving_day) {
+            $itinerary->renumberSpotsOn($previous_visit_date);
+        }
+
+        return new ItinerarySpotResource($spot->refresh()->load('place'));
     }
 
     /**
@@ -70,7 +84,9 @@ class ItinerarySpotController extends Controller
     {
         Gate::authorize('delete', [$spot, $itinerary]);
 
+        $visit_date = $spot->visit_date->toDateString();
         $spot->delete();
+        $itinerary->renumberSpotsOn($visit_date);
 
         return response()->json(null, 204);
     }

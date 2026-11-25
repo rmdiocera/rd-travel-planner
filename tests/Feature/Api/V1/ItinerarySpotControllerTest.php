@@ -31,24 +31,20 @@ test('user can list spots for their itinerary', function () {
         ->assertJsonCount(3, 'data');
 });
 
-test('spots grouped by visit_date are keyed by date with spots ordered by start_time', function () {
+test('grouped spots are keyed by date with each day in sort_order', function () {
     $user = User::factory()->create();
     $itinerary = Itinerary::factory()->for($user)->create();
+    createSpotsOnDay($itinerary, '2026-06-10', ['10:00']);
+    [$afternoon, $morning] = createSpotsOnDay($itinerary, '2026-06-09', ['14:00', '09:00']);
 
-    ItinerarySpot::factory()->for($itinerary)->create(['visit_date' => '2026-06-09', 'start_time' => '14:00']);
-    ItinerarySpot::factory()->for($itinerary)->create(['visit_date' => '2026-06-09', 'start_time' => '09:00']);
-    ItinerarySpot::factory()->for($itinerary)->create(['visit_date' => '2026-06-10', 'start_time' => '10:00']);
-
-    $response = $this->actingAs($user)
-        ->getJson("/api/v1/itineraries/{$itinerary->id}/spots?group_by_date=true")
-        ->assertOk();
-
-    $data = $response->json('data');
+    $data = $this->actingAs($user)
+        ->getJson("/api/v1/itineraries/{$itinerary->id}/spots?group_by_date=1")
+        ->assertOk()
+        ->json('data');
 
     expect(array_keys($data))->toBe(['2026-06-09', '2026-06-10']);
-    expect($data['2026-06-09'])->toHaveCount(2);
-    expect($data['2026-06-09'][0]['start_time'])->toBe('09:00:00');
-    expect($data['2026-06-10'])->toHaveCount(1);
+    expect(array_column($data['2026-06-09'], 'id'))->toBe([$afternoon->id, $morning->id]);
+    expect($data['2026-06-09'][0]['sort_order'])->toBe(1);
 });
 
 test('grouped spots list every visit to the same place', function () {
@@ -115,6 +111,33 @@ test('store allows the same place to be added to an itinerary more than once', f
     expect($itinerary->spots()->where('place_id', $place->id)->count())->toBe(3);
 });
 
+test('store puts a new spot at the end of its day', function () {
+    $user = User::factory()->create();
+    $itinerary = Itinerary::factory()->for($user)->create();
+    [$first, $second] = createSpotsOnDay($itinerary, '2026-06-09', [null, null]);
+    [$next_day_spot] = createSpotsOnDay($itinerary, '2026-06-10', [null]);
+
+    $response = $this->actingAs($user)
+        ->postJson("/api/v1/itineraries/{$itinerary->id}/spots", [
+            'place_id' => Place::factory()->create()->id,
+            'visit_date' => '2026-06-09',
+        ])
+        ->assertCreated()
+        ->assertJsonPath('data.sort_order', 3)
+        ->assertJsonPath('data.marked_visited', false);
+
+    expect(spotIdsBySortOrder($itinerary, '2026-06-09'))->toBe([1 => $first->id, 2 => $second->id, 3 => $response->json('data.id')]);
+    expect(spotIdsBySortOrder($itinerary, '2026-06-10'))->toBe([1 => $next_day_spot->id]);
+
+    $this->actingAs($user)
+        ->postJson("/api/v1/itineraries/{$itinerary->id}/spots", [
+            'place_id' => Place::factory()->create()->id,
+            'visit_date' => '2026-06-11',
+        ])
+        ->assertCreated()
+        ->assertJsonPath('data.sort_order', 1);
+});
+
 test('store rejects a place that does not exist', function () {
     $user = User::factory()->create();
     $itinerary = Itinerary::factory()->for($user)->create();
@@ -176,6 +199,39 @@ test('user can update a spot', function () {
     expect($spot->refresh()->marked_visited)->toBeTrue();
 });
 
+test('moving a spot to another day renumbers the old day and appends it to the new day', function () {
+    $user = User::factory()->create();
+    $itinerary = Itinerary::factory()->for($user)->create();
+    [$first, $moving, $third] = createSpotsOnDay($itinerary, '2026-06-09', [null, null, null]);
+    [$next_day_first, $next_day_second] = createSpotsOnDay($itinerary, '2026-06-10', [null, null]);
+
+    $this->actingAs($user)
+        ->patchJson("/api/v1/itineraries/{$itinerary->id}/spots/{$moving->id}", [
+            'visit_date' => '2026-06-10',
+        ])
+        ->assertOk()
+        ->assertJsonPath('data.sort_order', 3);
+
+    expect(spotIdsBySortOrder($itinerary, '2026-06-09'))->toBe([1 => $first->id, 2 => $third->id]);
+    expect(spotIdsBySortOrder($itinerary, '2026-06-10'))->toBe([1 => $next_day_first->id, 2 => $next_day_second->id, 3 => $moving->id]);
+});
+
+test('a visit_date in the API\'s datetime form for the same day does not move the spot', function () {
+    $user = User::factory()->create();
+    $itinerary = Itinerary::factory()->for($user)->create();
+    [$first, $second, $third] = createSpotsOnDay($itinerary, '2026-06-09', [null, null, null]);
+
+    $this->actingAs($user)
+        ->patchJson("/api/v1/itineraries/{$itinerary->id}/spots/{$second->id}", [
+            'visit_date' => '2026-06-09T00:00:00.000000Z',
+            'marked_visited' => true,
+        ])
+        ->assertOk()
+        ->assertJsonPath('data.sort_order', 2);
+
+    expect(spotIdsBySortOrder($itinerary, '2026-06-09'))->toBe([1 => $first->id, 2 => $second->id, 3 => $third->id]);
+});
+
 test('user cannot update a spot on another user\'s itinerary', function () {
     $user = User::factory()->create();
     $other = User::factory()->create();
@@ -220,6 +276,20 @@ test('deleting one visit to a place keeps the other visits', function () {
     expect($second_visit->fresh())->not->toBeNull();
 });
 
+test('deleting a spot renumbers its day', function () {
+    $user = User::factory()->create();
+    $itinerary = Itinerary::factory()->for($user)->create();
+    [$deleted, $second, $third] = createSpotsOnDay($itinerary, '2026-06-09', [null, null, null]);
+    [$next_day_spot] = createSpotsOnDay($itinerary, '2026-06-10', [null]);
+
+    $this->actingAs($user)
+        ->deleteJson("/api/v1/itineraries/{$itinerary->id}/spots/{$deleted->id}")
+        ->assertNoContent();
+
+    expect(spotIdsBySortOrder($itinerary, '2026-06-09'))->toBe([1 => $second->id, 2 => $third->id]);
+    expect(spotIdsBySortOrder($itinerary, '2026-06-10'))->toBe([1 => $next_day_spot->id]);
+});
+
 test('user cannot delete a spot on another user\'s itinerary', function () {
     $user = User::factory()->create();
     $other = User::factory()->create();
@@ -234,3 +304,30 @@ test('user cannot delete a spot on another user\'s itinerary', function () {
 
     expect($spot->fresh())->not->toBeNull();
 });
+
+/**
+ * Create one spot per start time on the day, numbered 1..n in that order.
+ *
+ * @param  list<string|null>  $start_times
+ * @return list<ItinerarySpot>
+ */
+function createSpotsOnDay(Itinerary $itinerary, string $visit_date, array $start_times): array
+{
+    return collect($start_times)
+        ->map(fn (?string $start_time, int $index) => ItinerarySpot::factory()->for($itinerary)->create([
+            'visit_date' => $visit_date,
+            'start_time' => $start_time,
+            'sort_order' => $index + 1,
+        ]))
+        ->all();
+}
+
+/**
+ * The day's spot ids keyed by sort_order, so one assertion checks both order and contiguity.
+ *
+ * @return array<int, string>
+ */
+function spotIdsBySortOrder(Itinerary $itinerary, string $visit_date): array
+{
+    return $itinerary->spotsOn($visit_date)->orderBy('sort_order')->pluck('id', 'sort_order')->all();
+}
