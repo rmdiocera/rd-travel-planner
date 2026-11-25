@@ -153,6 +153,18 @@ test('store validates end_date is after or equal to start_date', function () {
         ->assertJsonValidationErrors(['end_date']);
 });
 
+test('store requires both dates or neither', function (array $dates, string $missing_field, string $sent_field) {
+    $user = User::factory()->create();
+
+    $this->actingAs($user)
+        ->postJson('/api/v1/itineraries', ['name' => 'Trip to Peru', ...$dates])
+        ->assertUnprocessable()
+        ->assertJsonValidationErrors([$missing_field])
+        ->assertJsonMissingValidationErrors([$sent_field]);
+
+    expect($user->itineraries()->count())->toBe(0);
+})->with('only one date');
+
 test('user can view their own itinerary', function () {
     $user = User::factory()->create();
     $itinerary = Itinerary::factory()->for($user)->create();
@@ -208,6 +220,54 @@ test('user cannot update another user\'s itinerary', function () {
             'name' => 'Hijacked Trip',
         ])
         ->assertForbidden();
+});
+
+test('update requires both dates or neither', function (array $dates, string $missing_field, string $sent_field) {
+    $user = User::factory()->create();
+    $itinerary = Itinerary::factory()->for($user)->create([
+        'start_date' => '2026-05-01',
+        'end_date' => '2026-05-10',
+    ]);
+
+    $this->actingAs($user)
+        ->patchJson("/api/v1/itineraries/{$itinerary->id}", ['name' => 'Updated Trip', ...$dates])
+        ->assertUnprocessable()
+        ->assertJsonValidationErrors([$missing_field])
+        ->assertJsonMissingValidationErrors([$sent_field]);
+
+    $itinerary->refresh();
+
+    expect($itinerary->start_date->toDateString())->toBe('2026-05-01');
+    expect($itinerary->end_date->toDateString())->toBe('2026-05-10');
+})->with('only one date');
+
+test('an update that clears both dates moves the itinerary to unscheduled', function () {
+    $user = User::factory()->create();
+    $itinerary = Itinerary::factory()->for($user)->create([
+        'start_date' => today()->addMonth(),
+        'end_date' => today()->addMonths(2),
+    ]);
+
+    $this->actingAs($user)
+        ->patchJson("/api/v1/itineraries/{$itinerary->id}", [
+            'name' => 'Trip to Japan',
+            'start_date' => '',
+            'end_date' => '',
+        ])
+        ->assertOk()
+        ->assertJsonPath('data.start_date', null)
+        ->assertJsonPath('data.end_date', null);
+
+    $itinerary->refresh();
+
+    expect($itinerary->start_date)->toBeNull();
+    expect($itinerary->end_date)->toBeNull();
+
+    $this->actingAs($user)
+        ->getJson('/api/v1/itineraries?grouped=1')
+        ->assertOk()
+        ->assertJsonPath('data.unscheduled.0.id', $itinerary->id)
+        ->assertJsonCount(0, 'data.upcoming');
 });
 
 test('user can delete their own itinerary', function () {
@@ -288,3 +348,12 @@ test('user cannot delete another user\'s itinerary', function () {
 
     expect($itinerary->fresh())->not->toBeNull();
 });
+
+dataset('only one date', [
+    'only a start date' => [['start_date' => '2026-06-01'], 'end_date', 'start_date'],
+    'only a start date, the end sent as ""' => [['start_date' => '2026-06-01', 'end_date' => ''], 'end_date', 'start_date'],
+    'only an end date' => [['end_date' => '2026-06-14'], 'start_date', 'end_date'],
+    'only an end date, the start sent as ""' => [['start_date' => '', 'end_date' => '2026-06-14'], 'start_date', 'end_date'],
+    'the start date key sent alone, as ""' => [['start_date' => ''], 'end_date', 'start_date'],
+    'the end date key sent alone, as ""' => [['end_date' => ''], 'start_date', 'end_date'],
+]);

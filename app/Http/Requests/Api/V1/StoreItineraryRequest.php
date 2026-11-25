@@ -18,8 +18,8 @@ class StoreItineraryRequest extends FormRequest
     {
         return [
             'name' => ['required', 'string', 'max:255'],
-            'start_date' => ['nullable', 'date'],
-            'end_date' => ['nullable', 'date', 'after_or_equal:start_date'],
+            'start_date' => ['nullable', 'date', 'required_with:end_date', 'present_with:end_date'],
+            'end_date' => ['nullable', 'date', 'required_with:start_date', 'present_with:start_date', 'after_or_equal:start_date'],
             'notes' => ['nullable', 'string'],
         ];
     }
