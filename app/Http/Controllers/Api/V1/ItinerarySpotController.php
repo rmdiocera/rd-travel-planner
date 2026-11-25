@@ -24,7 +24,7 @@ class ItinerarySpotController extends Controller
 
         if ($request->group_by_date) {
             $grouped = $itinerary->spots()
-                ->with('place')
+                ->with('place.images')
                 ->orderBy('visit_date')
                 ->orderBy('sort_order')
                 ->get()
@@ -36,7 +36,7 @@ class ItinerarySpotController extends Controller
         }
 
         return ItinerarySpotResource::collection(
-            $itinerary->spots()->with('place')->latest()->get()
+            $itinerary->spots()->with('place.images')->latest()->get()
         );
     }
 
@@ -51,7 +51,7 @@ class ItinerarySpotController extends Controller
         $spot->sort_order = $itinerary->nextSpotSortOrder($spot->visit_date->toDateString());
         $spot->save();
 
-        return (new ItinerarySpotResource($spot->refresh()->load('place')))->response()->setStatusCode(201);
+        return (new ItinerarySpotResource($spot->refresh()->load('place.images')))->response()->setStatusCode(201);
     }
 
     /**
@@ -79,7 +79,7 @@ class ItinerarySpotController extends Controller
             $spot->moveIntoTimeOrder();
         }
 
-        return new ItinerarySpotResource($spot->refresh()->load('place'));
+        return new ItinerarySpotResource($spot->refresh()->load('place.images'));
     }
 
     /**

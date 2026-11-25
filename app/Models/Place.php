@@ -42,7 +42,7 @@ class Place extends Model
 
     public function images(): HasMany
     {
-        return $this->hasMany(PlaceImage::class, 'place_id');
+        return $this->hasMany(PlaceImage::class, 'place_id')->orderBy('id');
     }
 
     public function spots(): HasMany

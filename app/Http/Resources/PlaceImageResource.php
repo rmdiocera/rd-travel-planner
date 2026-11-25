@@ -4,6 +4,7 @@ namespace App\Http\Resources;
 
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\JsonResource;
+use Illuminate\Support\Facades\Storage;
 
 class PlaceImageResource extends JsonResource
 {
@@ -17,6 +18,7 @@ class PlaceImageResource extends JsonResource
         return [
             'id' => $this->id,
             'path' => $this->path,
+            'url' => Storage::disk('images')->url($this->path),
             'place_id' => $this->place_id,
             'created_at' => $this->created_at,
             'updated_at' => $this->updated_at,
