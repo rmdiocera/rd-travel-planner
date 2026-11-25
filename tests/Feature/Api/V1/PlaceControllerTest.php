@@ -15,12 +15,15 @@ test('unauthenticated users cannot access the places index', function () {
 
 test('authenticated user can list all places', function () {
     $user = User::factory()->create();
-    Place::factory()->count(3)->create();
+    $places = Place::factory()->count(3)->create();
 
-    $this->actingAs($user)
+    $ids = $this->actingAs($user)
         ->getJson('/api/v1/places')
         ->assertOk()
-        ->assertJsonCount(3, 'data');
+        ->assertJsonCount(Place::count(), 'data')
+        ->json('data.*.id');
+
+    expect($ids)->toContain(...$places->pluck('id'));
 });
 
 test('index without a search term still lists every place, newest first', function () {
