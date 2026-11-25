@@ -33,7 +33,7 @@ class ItineraryListItemController extends Controller
             $item->placeItem()->create([
                 'place_id' => $request->validated()['place_id'],
             ]);
-            $item->load('placeItem.place');
+            $item->load('placeItem.place.images');
         }
 
         return (new ItineraryListItemResource($item))->response()->setStatusCode(201);
@@ -95,7 +95,7 @@ class ItineraryListItemController extends Controller
     private function updatePlace(ItineraryListItem $item, UpdateItineraryListItemRequest $request): void
     {
         $item->placeItem()->update($request->safe()->only(['start_time', 'end_time', 'marked_visited']));
-        $item->load('placeItem.place');
+        $item->load('placeItem.place.images');
     }
 
     private function updateChecklist(ItineraryListItem $item, UpdateItineraryListItemRequest $request): void

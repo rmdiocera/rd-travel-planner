@@ -50,7 +50,7 @@ return [
         'images' => [
             'driver' => 'local',
             'root' => storage_path('app/images'),
-            'url' => rtrim(env('APP_URL', 'http://localhost'), '/').'/storage',
+            'url' => rtrim(env('APP_URL', 'http://localhost'), '/').'/images',
             'visibility' => 'public',
             'throw' => false,
             'report' => false,

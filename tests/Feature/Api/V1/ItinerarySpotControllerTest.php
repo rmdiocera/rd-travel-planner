@@ -5,7 +5,10 @@ declare(strict_types=1);
 use App\Models\Itinerary;
 use App\Models\ItinerarySpot;
 use App\Models\Place;
+use App\Models\PlaceImage;
 use App\Models\User;
+use Illuminate\Database\Eloquent\Collection;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 
 test('unauthenticated users cannot access spot endpoints', function () {
@@ -69,6 +72,69 @@ test('grouped spots list every visit to the same place', function () {
 
     expect($data['2026-06-09'])->toHaveCount(2);
     expect(array_column($data['2026-06-09'], 'place_id'))->toBe([$place->id, $place->id]);
+});
+
+test('grouped spots include each place\'s images in upload order', function () {
+    $user = User::factory()->create();
+    $itinerary = Itinerary::factory()->for($user)->create();
+    $pictured_place = Place::factory()->create();
+    [$first_image, $second_image] = PlaceImage::factory()->count(2)->create(['place_id' => $pictured_place->id])->all();
+    $create_spot = fn (Place $place, int $sort_order): ItinerarySpot => ItinerarySpot::factory()->for($itinerary)->for($place)->create([
+        'visit_date' => '2026-06-09',
+        'sort_order' => $sort_order,
+    ]);
+    $create_spot($pictured_place, 1);
+    $create_spot(Place::factory()->create(), 2);
+    $create_spot($pictured_place, 3);
+
+    $day = $this->actingAs($user)
+        ->getJson("/api/v1/itineraries/{$itinerary->id}/spots?group_by_date=1")
+        ->assertOk()
+        ->json('data.2026-06-09');
+
+    expect(array_column($day[0]['place']['images'], 'id'))->toBe([$first_image->id, $second_image->id]);
+    expect($day[0]['place']['images'][0]['url'])->toBe(asset("images/{$first_image->path}"));
+    expect($day[1]['place']['images'])->toBe([]);
+    expect(array_column($day[2]['place']['images'], 'id'))->toBe([$first_image->id, $second_image->id]);
+});
+
+test('ungrouped spots include each place\'s images', function () {
+    $user = User::factory()->create();
+    $itinerary = Itinerary::factory()->for($user)->create();
+    $place = Place::factory()->create();
+    $image = PlaceImage::factory()->create(['place_id' => $place->id]);
+    ItinerarySpot::factory()->for($itinerary)->for($place)->create();
+
+    $this->actingAs($user)
+        ->getJson("/api/v1/itineraries/{$itinerary->id}/spots")
+        ->assertOk()
+        ->assertJsonPath('data.0.place.images.0.url', asset("images/{$image->path}"));
+});
+
+test('grouped spots load place images without a query per spot', function () {
+    $user = User::factory()->create();
+    $itinerary = Itinerary::factory()->for($user)->create();
+    $add_pictured_spots = fn (int $count): Collection => ItinerarySpot::factory()
+        ->count($count)
+        ->for($itinerary)
+        ->create(['visit_date' => '2026-06-09'])
+        ->each(fn (ItinerarySpot $spot) => PlaceImage::factory()->create(['place_id' => $spot->place_id]));
+    $count_queries = function () use ($user, $itinerary): int {
+        DB::flushQueryLog();
+        DB::enableQueryLog();
+        $this->actingAs($user)
+            ->getJson("/api/v1/itineraries/{$itinerary->id}/spots?group_by_date=1")
+            ->assertOk();
+        DB::disableQueryLog();
+
+        return count(DB::getQueryLog());
+    };
+
+    $add_pictured_spots(1);
+    $queries_for_one_spot = $count_queries();
+    $add_pictured_spots(3);
+
+    expect($count_queries())->toBe($queries_for_one_spot);
 });
 
 test('user cannot list spots for another user\'s itinerary', function () {
@@ -147,6 +213,22 @@ test('store puts a new spot at the end of its day', function () {
         ->assertJsonPath('data.sort_order', 1);
 });
 
+test('the spot store response includes the place\'s images', function () {
+    $user = User::factory()->create();
+    $itinerary = Itinerary::factory()->for($user)->create();
+    $place = Place::factory()->create();
+    [$first_image, $second_image] = PlaceImage::factory()->count(2)->create(['place_id' => $place->id])->all();
+
+    $this->actingAs($user)
+        ->postJson("/api/v1/itineraries/{$itinerary->id}/spots", [
+            'place_id' => $place->id,
+            'visit_date' => '2026-06-09',
+        ])
+        ->assertCreated()
+        ->assertJsonPath('data.place.images.0.url', asset("images/{$first_image->path}"))
+        ->assertJsonPath('data.place.images.1.id', $second_image->id);
+});
+
 test('store rejects a place that does not exist', function () {
     $user = User::factory()->create();
     $itinerary = Itinerary::factory()->for($user)->create();
@@ -206,6 +288,25 @@ test('user can update a spot', function () {
         ->assertJsonPath('data.marked_visited', true);
 
     expect($spot->refresh()->marked_visited)->toBeTrue();
+});
+
+test('the spot update response includes the place\'s images', function () {
+    $user = User::factory()->create();
+    $itinerary = Itinerary::factory()->for($user)->create();
+    $place = Place::factory()->create();
+    $image = PlaceImage::factory()->create(['place_id' => $place->id]);
+    $spot = ItinerarySpot::factory()->for($itinerary)->for($place)->create(['visit_date' => '2026-06-09']);
+    createSpotsOnDay($itinerary, '2026-06-10', [null]);
+
+    $this->actingAs($user)
+        ->patchJson("/api/v1/itineraries/{$itinerary->id}/spots/{$spot->id}", [
+            'visit_date' => '2026-06-10',
+            'start_time' => '10:00',
+            'end_time' => '11:00',
+        ])
+        ->assertOk()
+        ->assertJsonPath('data.sort_order', 2)
+        ->assertJsonPath('data.place.images.0.url', asset("images/{$image->path}"));
 });
 
 test('moving a spot to another day renumbers the old day and appends it to the new day', function () {

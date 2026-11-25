@@ -6,7 +6,12 @@ use App\Models\Itinerary;
 use App\Models\ItineraryList;
 use App\Models\ItineraryListItem;
 use App\Models\ItineraryListItemChecklistItem;
+use App\Models\ItineraryListItemPlace;
+use App\Models\Place;
+use App\Models\PlaceImage;
 use App\Models\User;
+use Illuminate\Database\Eloquent\Collection;
+use Illuminate\Support\Facades\DB;
 
 test('unauthenticated users cannot access list endpoints', function () {
     $itinerary = Itinerary::factory()->create();
@@ -31,6 +36,76 @@ test('user can list their itinerary\'s lists', function () {
         ->getJson("/api/v1/itineraries/{$itinerary->id}/lists")
         ->assertOk()
         ->assertJsonCount(3, 'data');
+});
+
+test('listing lists includes each place item\'s place images', function () {
+    $user = User::factory()->create();
+    $itinerary = Itinerary::factory()->for($user)->create();
+    $list = ItineraryList::factory()->for($itinerary)->create(['sort_order' => 1]);
+    $pictured_place = Place::factory()->create();
+    [$first_image, $second_image] = PlaceImage::factory()->count(2)->create(['place_id' => $pictured_place->id])->all();
+    $create_place_item = fn (Place $place, int $sort_order): ItineraryListItemPlace => ItineraryListItemPlace::factory()
+        ->for(ItineraryListItem::factory()->for($list)->create(['type' => 'place', 'sort_order' => $sort_order]), 'item')
+        ->create(['place_id' => $place->id]);
+    $create_place_item($pictured_place, 1);
+    $create_place_item(Place::factory()->create(), 2);
+    ItineraryListItem::factory()->for($list)->create(['type' => 'note', 'sort_order' => 3]);
+
+    $items = $this->actingAs($user)
+        ->getJson("/api/v1/itineraries/{$itinerary->id}/lists")
+        ->assertOk()
+        ->json('data.0.items');
+
+    expect(array_column($items[0]['place']['place']['images'], 'id'))->toBe([$first_image->id, $second_image->id]);
+    expect($items[0]['place']['place']['images'][0]['url'])->toBe(asset("images/{$first_image->path}"));
+    expect($items[1]['place']['place']['images'])->toBe([]);
+    expect($items[2]['place'])->toBeNull();
+});
+
+test('listing lists loads place images without a query per place item', function () {
+    $user = User::factory()->create();
+    $itinerary = Itinerary::factory()->for($user)->create();
+    $list = ItineraryList::factory()->for($itinerary)->create(['sort_order' => 1]);
+    $add_pictured_place_items = fn (int $count): Collection => ItineraryListItem::factory()
+        ->count($count)
+        ->for($list)
+        ->create(['type' => 'place'])
+        ->each(function (ItineraryListItem $item): void {
+            $place_item = ItineraryListItemPlace::factory()->for($item, 'item')->create();
+            PlaceImage::factory()->create(['place_id' => $place_item->place_id]);
+        });
+    $count_queries = function () use ($user, $itinerary): int {
+        DB::flushQueryLog();
+        DB::enableQueryLog();
+        $this->actingAs($user)
+            ->getJson("/api/v1/itineraries/{$itinerary->id}/lists")
+            ->assertOk();
+        DB::disableQueryLog();
+
+        return count(DB::getQueryLog());
+    };
+
+    $add_pictured_place_items(1);
+    $queries_for_one_item = $count_queries();
+    $add_pictured_place_items(3);
+
+    expect($count_queries())->toBe($queries_for_one_item);
+});
+
+test('listing lists still returns place items whose place was deleted', function () {
+    $user = User::factory()->create();
+    $itinerary = Itinerary::factory()->for($user)->create();
+    $list = ItineraryList::factory()->for($itinerary)->create(['sort_order' => 1]);
+    $place = Place::factory()->create();
+    $item = ItineraryListItem::factory()->for($list)->create(['type' => 'place', 'sort_order' => 1]);
+    ItineraryListItemPlace::factory()->for($item, 'item')->create(['place_id' => $place->id]);
+    $place->delete();
+
+    $this->actingAs($user)
+        ->getJson("/api/v1/itineraries/{$itinerary->id}/lists")
+        ->assertOk()
+        ->assertJsonPath('data.0.items.0.id', $item->id)
+        ->assertJsonPath('data.0.items.0.place', null);
 });
 
 test('user cannot list another user\'s itinerary lists', function () {

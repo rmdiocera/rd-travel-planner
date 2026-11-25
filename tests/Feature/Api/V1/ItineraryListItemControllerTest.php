@@ -8,6 +8,7 @@ use App\Models\ItineraryListItem;
 use App\Models\ItineraryListItemChecklistItem;
 use App\Models\ItineraryListItemPlace;
 use App\Models\Place;
+use App\Models\PlaceImage;
 use App\Models\User;
 
 test('unauthenticated users cannot access item endpoints', function () {
@@ -41,6 +42,22 @@ test('user can add a place item to their list', function () {
         ->assertJsonPath('data.sort_order', 1);
 
     expect($list->items()->count())->toBe(1);
+});
+
+test('the place item store response includes the place\'s images', function () {
+    $user = User::factory()->create();
+    $place = Place::factory()->create();
+    $image = PlaceImage::factory()->create(['place_id' => $place->id]);
+    $itinerary = Itinerary::factory()->for($user)->create();
+    $list = ItineraryList::factory()->for($itinerary)->create(['sort_order' => 1]);
+
+    $this->actingAs($user)
+        ->postJson("/api/v1/itineraries/{$itinerary->id}/lists/{$list->id}/items", [
+            'type' => 'place',
+            'place_id' => $place->id,
+        ])
+        ->assertCreated()
+        ->assertJsonPath('data.place.place.images.0.url', asset("images/{$image->path}"));
 });
 
 test('user cannot add an item to another user\'s list', function () {
@@ -151,6 +168,29 @@ test('user can toggle marked_visited on a place item', function () {
         ->assertJsonPath('data.place.marked_visited', true);
 
     expect($place_item->refresh()->marked_visited)->toBeTrue();
+});
+
+test('the place item update response includes the place\'s images', function () {
+    $user = User::factory()->create();
+    $place = Place::factory()->create();
+    $image = PlaceImage::factory()->create(['place_id' => $place->id]);
+    $itinerary = Itinerary::factory()->for($user)->create();
+    $list = ItineraryList::factory()->for($itinerary)->create(['sort_order' => 1]);
+    $item = ItineraryListItem::factory()->for($list)->create([
+        'type' => 'place',
+        'sort_order' => 1,
+    ]);
+    ItineraryListItemPlace::factory()->for($item, 'item')->create([
+        'place_id' => $place->id,
+    ]);
+
+    $this->actingAs($user)
+        ->patchJson("/api/v1/itineraries/{$itinerary->id}/lists/{$list->id}/items/{$item->id}", [
+            'type' => 'place',
+            'marked_visited' => true,
+        ])
+        ->assertOk()
+        ->assertJsonPath('data.place.place.images.0.url', asset("images/{$image->path}"));
 });
 
 test('user can update the title of a checklist on their list', function () {

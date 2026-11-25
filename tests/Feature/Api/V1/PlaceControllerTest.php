@@ -15,12 +15,15 @@ test('unauthenticated users cannot access the places index', function () {
 
 test('authenticated user can list all places', function () {
     $user = User::factory()->create();
-    Place::factory()->count(3)->create();
+    $places = Place::factory()->count(3)->create();
 
-    $this->actingAs($user)
+    $ids = $this->actingAs($user)
         ->getJson('/api/v1/places')
         ->assertOk()
-        ->assertJsonCount(3, 'data');
+        ->assertJsonCount(Place::count(), 'data')
+        ->json('data.*.id');
+
+    expect($ids)->toContain(...$places->pluck('id'));
 });
 
 test('index without a search term still lists every place, newest first', function () {
@@ -265,6 +268,33 @@ test('authenticated user can create a place with images', function () {
     foreach ($response->json('data.images') as $image) {
         Storage::disk('images')->assertExists($image['path']);
     }
+});
+
+test('the place store response gives each image a url under the images link', function () {
+    $user = User::factory()->create();
+
+    Storage::fake('images', ['url' => config('filesystems.disks.images.url')]);
+
+    $images = $this->actingAs($user)
+        ->postJson('/api/v1/places', [
+            'name' => 'Kyoto Railway Museum',
+            'details' => 'Railway museum with steam locomotives and a working roundhouse.',
+            'address' => 'Kankijicho, Shimogyo Ward, Kyoto, 600-8835, Japan',
+            'country' => 'Japan',
+            'city' => 'Kyoto',
+            'images' => [
+                UploadedFile::fake()->image('first.jpg', 800, 800),
+                UploadedFile::fake()->image('second.jpg', 800, 800),
+            ],
+        ])
+        ->assertCreated()
+        ->json('data.images');
+
+    expect($images)->toHaveCount(2);
+    expect(array_column($images, 'url'))->toBe(array_map(
+        fn (array $image): string => asset("images/{$image['path']}"),
+        $images,
+    ));
 });
 
 test('store returns validation errors if uploaded file is not a valid image', function () {
