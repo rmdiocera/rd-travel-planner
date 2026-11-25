@@ -233,6 +233,164 @@ test('a visit_date in the API\'s datetime form for the same day does not move th
     expect(spotIdsBySortOrder($itinerary, '2026-06-09'))->toBe([1 => $first->id, 2 => $second->id, 3 => $third->id]);
 });
 
+test('a start time later than the next timed spot moves the spot just after it', function () {
+    $user = User::factory()->create();
+    $itinerary = Itinerary::factory()->for($user)->create();
+    [$shibuya_crossing, $meiji_jingu, $harajuku] = createSpotsOnDay($itinerary, '2026-06-09', ['09:00', '11:00', null]);
+
+    $this->actingAs($user)
+        ->patchJson("/api/v1/itineraries/{$itinerary->id}/spots/{$shibuya_crossing->id}", [
+            'visit_date' => '2026-06-09',
+            'start_time' => '13:00',
+            'end_time' => null,
+        ])
+        ->assertOk()
+        ->assertJsonPath('data.sort_order', 2);
+
+    expect(spotIdsBySortOrder($itinerary, '2026-06-09'))->toBe([1 => $meiji_jingu->id, 2 => $shibuya_crossing->id, 3 => $harajuku->id]);
+});
+
+test('setting the only start time on a day keeps the spot in place', function () {
+    $user = User::factory()->create();
+    $itinerary = Itinerary::factory()->for($user)->create();
+    [$shibuya_crossing, $meiji_jingu, $harajuku] = createSpotsOnDay($itinerary, '2026-06-09', [null, null, null]);
+
+    $this->actingAs($user)
+        ->patchJson("/api/v1/itineraries/{$itinerary->id}/spots/{$meiji_jingu->id}", [
+            'visit_date' => '2026-06-09',
+            'start_time' => '11:00',
+            'end_time' => null,
+        ])
+        ->assertOk()
+        ->assertJsonPath('data.sort_order', 2);
+
+    expect(spotIdsBySortOrder($itinerary, '2026-06-09'))->toBe([1 => $shibuya_crossing->id, 2 => $meiji_jingu->id, 3 => $harajuku->id]);
+});
+
+test('a start time in order with the next timed spot keeps the spot in place', function () {
+    $user = User::factory()->create();
+    $itinerary = Itinerary::factory()->for($user)->create();
+    [$shibuya_crossing, $meiji_jingu, $harajuku] = createSpotsOnDay($itinerary, '2026-06-09', [null, '11:00', null]);
+
+    $this->actingAs($user)
+        ->patchJson("/api/v1/itineraries/{$itinerary->id}/spots/{$shibuya_crossing->id}", [
+            'visit_date' => '2026-06-09',
+            'start_time' => '09:00',
+            'end_time' => null,
+        ])
+        ->assertOk()
+        ->assertJsonPath('data.sort_order', 1);
+
+    expect(spotIdsBySortOrder($itinerary, '2026-06-09'))->toBe([1 => $shibuya_crossing->id, 2 => $meiji_jingu->id, 3 => $harajuku->id]);
+});
+
+test('a start time earlier than the timed spots before it moves the spot ahead of each', function () {
+    $user = User::factory()->create();
+    $itinerary = Itinerary::factory()->for($user)->create();
+    [$meiji_jingu, $shibuya_crossing, $harajuku, $senso_ji] = createSpotsOnDay($itinerary, '2026-06-09', ['11:00', '13:00', null, null]);
+
+    $this->actingAs($user)
+        ->patchJson("/api/v1/itineraries/{$itinerary->id}/spots/{$senso_ji->id}", [
+            'visit_date' => '2026-06-09',
+            'start_time' => '10:00',
+            'end_time' => null,
+        ])
+        ->assertOk()
+        ->assertJsonPath('data.sort_order', 1);
+
+    expect(spotIdsBySortOrder($itinerary, '2026-06-09'))->toBe([1 => $senso_ji->id, 2 => $meiji_jingu->id, 3 => $shibuya_crossing->id, 4 => $harajuku->id]);
+});
+
+test('resending the unchanged start time does not move the spot', function () {
+    $user = User::factory()->create();
+    $itinerary = Itinerary::factory()->for($user)->create();
+    [$shibuya_crossing, $senso_ji, $meiji_jingu, $harajuku] = createSpotsOnDay($itinerary, '2026-06-09', ['13:00', '10:00', '11:00', null]);
+
+    $this->actingAs($user)
+        ->patchJson("/api/v1/itineraries/{$itinerary->id}/spots/{$shibuya_crossing->id}", [
+            'visit_date' => '2026-06-09',
+            'start_time' => '13:00',
+            'end_time' => '14:00',
+            'marked_visited' => true,
+        ])
+        ->assertOk()
+        ->assertJsonPath('data.sort_order', 1)
+        ->assertJsonPath('data.start_time', '13:00:00')
+        ->assertJsonPath('data.end_time', '14:00:00');
+
+    expect(spotIdsBySortOrder($itinerary, '2026-06-09'))->toBe([1 => $shibuya_crossing->id, 2 => $senso_ji->id, 3 => $meiji_jingu->id, 4 => $harajuku->id]);
+});
+
+test('a start time equal to the previous timed spot\'s keeps the spot in place', function () {
+    $user = User::factory()->create();
+    $itinerary = Itinerary::factory()->for($user)->create();
+    [$first, $second] = createSpotsOnDay($itinerary, '2026-06-09', ['10:00', null]);
+
+    $this->actingAs($user)
+        ->patchJson("/api/v1/itineraries/{$itinerary->id}/spots/{$second->id}", [
+            'visit_date' => '2026-06-09',
+            'start_time' => '10:00',
+            'end_time' => null,
+        ])
+        ->assertOk()
+        ->assertJsonPath('data.sort_order', 2);
+
+    expect(spotIdsBySortOrder($itinerary, '2026-06-09'))->toBe([1 => $first->id, 2 => $second->id]);
+});
+
+test('the earlier-neighbour check runs first on a day out of time order', function () {
+    $user = User::factory()->create();
+    $itinerary = Itinerary::factory()->for($user)->create();
+    [$afternoon, $moving, $morning] = createSpotsOnDay($itinerary, '2026-06-09', ['14:00', null, '09:00']);
+
+    $this->actingAs($user)
+        ->patchJson("/api/v1/itineraries/{$itinerary->id}/spots/{$moving->id}", [
+            'visit_date' => '2026-06-09',
+            'start_time' => '12:00',
+            'end_time' => null,
+        ])
+        ->assertOk()
+        ->assertJsonPath('data.sort_order', 1);
+
+    expect(spotIdsBySortOrder($itinerary, '2026-06-09'))->toBe([1 => $moving->id, 2 => $afternoon->id, 3 => $morning->id]);
+});
+
+test('clearing a start time keeps the spot in place', function () {
+    $user = User::factory()->create();
+    $itinerary = Itinerary::factory()->for($user)->create();
+    [$senso_ji, $meiji_jingu, $shibuya_crossing] = createSpotsOnDay($itinerary, '2026-06-09', ['10:00', '11:00', '13:00']);
+
+    $this->actingAs($user)
+        ->patchJson("/api/v1/itineraries/{$itinerary->id}/spots/{$meiji_jingu->id}", [
+            'visit_date' => '2026-06-09',
+            'start_time' => null,
+            'end_time' => null,
+        ])
+        ->assertOk()
+        ->assertJsonPath('data.sort_order', 2);
+
+    expect(spotIdsBySortOrder($itinerary, '2026-06-09'))->toBe([1 => $senso_ji->id, 2 => $meiji_jingu->id, 3 => $shibuya_crossing->id]);
+});
+
+test('moving a timed spot to another day places it in time order there', function () {
+    $user = User::factory()->create();
+    $itinerary = Itinerary::factory()->for($user)->create();
+    [$moving] = createSpotsOnDay($itinerary, '2026-06-09', ['10:00']);
+    [$morning, $late_morning] = createSpotsOnDay($itinerary, '2026-06-10', ['09:00', '11:00']);
+
+    $this->actingAs($user)
+        ->patchJson("/api/v1/itineraries/{$itinerary->id}/spots/{$moving->id}", [
+            'visit_date' => '2026-06-10',
+            'start_time' => '10:00',
+            'end_time' => null,
+        ])
+        ->assertOk()
+        ->assertJsonPath('data.sort_order', 2);
+
+    expect(spotIdsBySortOrder($itinerary, '2026-06-10'))->toBe([1 => $morning->id, 2 => $moving->id, 3 => $late_morning->id]);
+    expect(spotIdsBySortOrder($itinerary, '2026-06-09'))->toBe([]);
+});
+
 test('user cannot update a spot on another user\'s itinerary', function () {
     $user = User::factory()->create();
     $other = User::factory()->create();

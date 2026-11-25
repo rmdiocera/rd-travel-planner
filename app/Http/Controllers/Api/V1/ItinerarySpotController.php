@@ -75,6 +75,10 @@ class ItinerarySpotController extends Controller
             $itinerary->renumberSpotsOn($previous_visit_date);
         }
 
+        if ($spot->start_time !== null && ($is_moving_day || $spot->wasChanged('start_time'))) {
+            $spot->moveIntoTimeOrder();
+        }
+
         return new ItinerarySpotResource($spot->refresh()->load('place'));
     }
 
