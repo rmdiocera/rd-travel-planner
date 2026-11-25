@@ -30,7 +30,7 @@ class ItineraryListController extends Controller
                     'items' => function ($query) {
                         $query->orderBy('sort_order');
                     },
-                    'items.placeItem.place',
+                    'items.placeItem.place.images',
                     'items.checklistItems' => function ($query) {
                         $query->orderBy('sort_order');
                     },
