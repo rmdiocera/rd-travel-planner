@@ -16,6 +16,7 @@ test('unauthenticated users cannot access spot endpoints', function () {
     $this->putJson("/api/v1/itineraries/{$itinerary->id}/spots/{$spot->id}")->assertUnauthorized();
     $this->patchJson("/api/v1/itineraries/{$itinerary->id}/spots/{$spot->id}")->assertUnauthorized();
     $this->deleteJson("/api/v1/itineraries/{$itinerary->id}/spots/{$spot->id}")->assertUnauthorized();
+    $this->patchJson("/api/v1/itineraries/{$itinerary->id}/spots/reorder")->assertUnauthorized();
 });
 
 test('user can list spots for their itinerary', function () {
@@ -303,6 +304,178 @@ test('user cannot delete a spot on another user\'s itinerary', function () {
         ->assertForbidden();
 
     expect($spot->fresh())->not->toBeNull();
+});
+
+test('user can reorder a day\'s spots', function () {
+    $user = User::factory()->create();
+    $itinerary = Itinerary::factory()->for($user)->create();
+    [$senso_ji, $meiji_jingu, $shibuya_crossing, $harajuku] = createSpotsOnDay($itinerary, '2026-06-09', ['10:00', '11:00', '13:00', null]);
+    [$next_day_spot] = createSpotsOnDay($itinerary, '2026-06-10', [null]);
+
+    $this->assertTrue($user->can('reorder', [ItinerarySpot::class, $itinerary]));
+
+    $this->actingAs($user)
+        ->patchJson("/api/v1/itineraries/{$itinerary->id}/spots/reorder", [
+            'visit_date' => '2026-06-09',
+            'spot_ids' => [$harajuku->id, $senso_ji->id, $meiji_jingu->id, $shibuya_crossing->id],
+        ])
+        ->assertNoContent();
+
+    expect(spotIdsBySortOrder($itinerary, '2026-06-09'))->toBe([1 => $harajuku->id, 2 => $senso_ji->id, 3 => $meiji_jingu->id, 4 => $shibuya_crossing->id]);
+    expect(spotIdsBySortOrder($itinerary, '2026-06-10'))->toBe([1 => $next_day_spot->id]);
+});
+
+test('reorder saves times out of order as sent', function () {
+    $user = User::factory()->create();
+    $itinerary = Itinerary::factory()->for($user)->create();
+    [$senso_ji, $meiji_jingu, $shibuya_crossing, $harajuku] = createSpotsOnDay($itinerary, '2026-06-09', ['10:00', '11:00', '13:00', null]);
+
+    $this->actingAs($user)
+        ->patchJson("/api/v1/itineraries/{$itinerary->id}/spots/reorder", [
+            'visit_date' => '2026-06-09',
+            'spot_ids' => [$shibuya_crossing->id, $senso_ji->id, $meiji_jingu->id, $harajuku->id],
+        ])
+        ->assertNoContent();
+
+    expect(spotIdsBySortOrder($itinerary, '2026-06-09'))->toBe([1 => $shibuya_crossing->id, 2 => $senso_ji->id, 3 => $meiji_jingu->id, 4 => $harajuku->id]);
+});
+
+test('reorder rejects a list missing a spot of the day', function () {
+    $user = User::factory()->create();
+    $itinerary = Itinerary::factory()->for($user)->create();
+    [$senso_ji, $meiji_jingu, $shibuya_crossing, $harajuku] = createSpotsOnDay($itinerary, '2026-06-09', ['10:00', '11:00', '13:00', null]);
+    [$next_day_spot] = createSpotsOnDay($itinerary, '2026-06-10', [null]);
+
+    $this->actingAs($user)
+        ->patchJson("/api/v1/itineraries/{$itinerary->id}/spots/reorder", [
+            'visit_date' => '2026-06-09',
+            'spot_ids' => [$shibuya_crossing->id, $senso_ji->id, $meiji_jingu->id],
+        ])
+        ->assertUnprocessable()
+        ->assertJsonValidationErrors(['spot_ids' => 'The spot ids must list every spot on this day exactly once.']);
+
+    expect(spotIdsBySortOrder($itinerary, '2026-06-09'))->toBe([1 => $senso_ji->id, 2 => $meiji_jingu->id, 3 => $shibuya_crossing->id, 4 => $harajuku->id]);
+    expect(spotIdsBySortOrder($itinerary, '2026-06-10'))->toBe([1 => $next_day_spot->id]);
+});
+
+test('reorder rejects a spot from another day', function () {
+    $user = User::factory()->create();
+    $itinerary = Itinerary::factory()->for($user)->create();
+    [$senso_ji, $meiji_jingu, $shibuya_crossing, $harajuku] = createSpotsOnDay($itinerary, '2026-06-09', ['10:00', '11:00', '13:00', null]);
+    [$next_day_spot] = createSpotsOnDay($itinerary, '2026-06-10', [null]);
+
+    $this->actingAs($user)
+        ->patchJson("/api/v1/itineraries/{$itinerary->id}/spots/reorder", [
+            'visit_date' => '2026-06-09',
+            'spot_ids' => [$harajuku->id, $senso_ji->id, $meiji_jingu->id, $shibuya_crossing->id, $next_day_spot->id],
+        ])
+        ->assertUnprocessable()
+        ->assertJsonValidationErrors(['spot_ids']);
+
+    expect(spotIdsBySortOrder($itinerary, '2026-06-09'))->toBe([1 => $senso_ji->id, 2 => $meiji_jingu->id, 3 => $shibuya_crossing->id, 4 => $harajuku->id]);
+    expect(spotIdsBySortOrder($itinerary, '2026-06-10'))->toBe([1 => $next_day_spot->id]);
+});
+
+test('reorder rejects a spot from another itinerary', function () {
+    $user = User::factory()->create();
+    $itinerary = Itinerary::factory()->for($user)->create();
+    $other_itinerary = Itinerary::factory()->for($user)->create();
+    [$senso_ji, $meiji_jingu, $shibuya_crossing, $harajuku] = createSpotsOnDay($itinerary, '2026-06-09', ['10:00', '11:00', '13:00', null]);
+    [$other_itinerary_spot] = createSpotsOnDay($other_itinerary, '2026-06-09', [null]);
+
+    $this->actingAs($user)
+        ->patchJson("/api/v1/itineraries/{$itinerary->id}/spots/reorder", [
+            'visit_date' => '2026-06-09',
+            'spot_ids' => [$harajuku->id, $senso_ji->id, $meiji_jingu->id, $shibuya_crossing->id, $other_itinerary_spot->id],
+        ])
+        ->assertUnprocessable()
+        ->assertJsonValidationErrors(['spot_ids']);
+
+    expect(spotIdsBySortOrder($itinerary, '2026-06-09'))->toBe([1 => $senso_ji->id, 2 => $meiji_jingu->id, 3 => $shibuya_crossing->id, 4 => $harajuku->id]);
+    expect($other_itinerary_spot->refresh()->sort_order)->toBe(1);
+});
+
+test('reorder rejects a repeated spot', function () {
+    $user = User::factory()->create();
+    $itinerary = Itinerary::factory()->for($user)->create();
+    [$senso_ji, $meiji_jingu, $shibuya_crossing, $harajuku] = createSpotsOnDay($itinerary, '2026-06-09', ['10:00', '11:00', '13:00', null]);
+
+    $this->actingAs($user)
+        ->patchJson("/api/v1/itineraries/{$itinerary->id}/spots/reorder", [
+            'visit_date' => '2026-06-09',
+            'spot_ids' => [$harajuku->id, $senso_ji->id, $meiji_jingu->id, $shibuya_crossing->id, $senso_ji->id],
+        ])
+        ->assertUnprocessable()
+        ->assertJsonValidationErrors(['spot_ids.4']);
+
+    expect(spotIdsBySortOrder($itinerary, '2026-06-09'))->toBe([1 => $senso_ji->id, 2 => $meiji_jingu->id, 3 => $shibuya_crossing->id, 4 => $harajuku->id]);
+});
+
+test('reorder rejects spot_ids sent as an object', function () {
+    $user = User::factory()->create();
+    $itinerary = Itinerary::factory()->for($user)->create();
+    [$senso_ji, $meiji_jingu, $shibuya_crossing, $harajuku] = createSpotsOnDay($itinerary, '2026-06-09', ['10:00', '11:00', '13:00', null]);
+
+    $this->actingAs($user)
+        ->patchJson("/api/v1/itineraries/{$itinerary->id}/spots/reorder", [
+            'visit_date' => '2026-06-09',
+            'spot_ids' => [
+                'first' => $harajuku->id,
+                'second' => $senso_ji->id,
+                'third' => $meiji_jingu->id,
+                'fourth' => $shibuya_crossing->id,
+            ],
+        ])
+        ->assertUnprocessable()
+        ->assertJsonValidationErrors(['spot_ids']);
+
+    expect(spotIdsBySortOrder($itinerary, '2026-06-09'))->toBe([1 => $senso_ji->id, 2 => $meiji_jingu->id, 3 => $shibuya_crossing->id, 4 => $harajuku->id]);
+});
+
+test('reorder validates visit_date and spot_ids', function () {
+    $user = User::factory()->create();
+    $itinerary = Itinerary::factory()->for($user)->create();
+    [$senso_ji, $meiji_jingu, $shibuya_crossing, $harajuku] = createSpotsOnDay($itinerary, '2026-06-09', ['10:00', '11:00', '13:00', null]);
+
+    $this->actingAs($user)
+        ->patchJson("/api/v1/itineraries/{$itinerary->id}/spots/reorder", [])
+        ->assertUnprocessable()
+        ->assertJsonValidationErrors(['visit_date', 'spot_ids']);
+
+    $this->actingAs($user)
+        ->patchJson("/api/v1/itineraries/{$itinerary->id}/spots/reorder", [
+            'visit_date' => '2026-6-9',
+            'spot_ids' => [$harajuku->id, $senso_ji->id, $meiji_jingu->id, $shibuya_crossing->id],
+        ])
+        ->assertUnprocessable()
+        ->assertJsonValidationErrors(['visit_date']);
+
+    expect(spotIdsBySortOrder($itinerary, '2026-06-09'))->toBe([1 => $senso_ji->id, 2 => $meiji_jingu->id, 3 => $shibuya_crossing->id, 4 => $harajuku->id]);
+});
+
+test('user cannot reorder another user\'s itinerary spots', function () {
+    $user = User::factory()->create();
+    $other = User::factory()->create();
+    $itinerary = Itinerary::factory()->for($other)->create();
+    [$senso_ji, $meiji_jingu, $shibuya_crossing, $harajuku] = createSpotsOnDay($itinerary, '2026-06-09', ['10:00', '11:00', '13:00', null]);
+
+    $this->assertFalse($user->can('reorder', [ItinerarySpot::class, $itinerary]));
+
+    $this->actingAs($user)
+        ->patchJson("/api/v1/itineraries/{$itinerary->id}/spots/reorder", [
+            'visit_date' => '2026-06-09',
+            'spot_ids' => [$harajuku->id, $senso_ji->id, $meiji_jingu->id, $shibuya_crossing->id],
+        ])
+        ->assertForbidden();
+
+    $this->actingAs($user)
+        ->patchJson("/api/v1/itineraries/{$itinerary->id}/spots/reorder", [
+            'visit_date' => '2026-06-09',
+            'spot_ids' => [$shibuya_crossing->id, $senso_ji->id],
+        ])
+        ->assertForbidden();
+
+    expect(spotIdsBySortOrder($itinerary, '2026-06-09'))->toBe([1 => $senso_ji->id, 2 => $meiji_jingu->id, 3 => $shibuya_crossing->id, 4 => $harajuku->id]);
 });
 
 /**

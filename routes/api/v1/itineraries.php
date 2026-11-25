@@ -11,6 +11,8 @@ use Illuminate\Support\Facades\Route;
 
 Route::apiResource('itineraries', ItineraryController::class);
 
+Route::patch('itineraries/{itinerary}/spots/reorder', [ItinerarySpotController::class, 'reorder'])->name('itineraries.spots.reorder');
+
 Route::apiResource('itineraries/{itinerary}/spots', ItinerarySpotController::class)
     ->parameters(['spots' => 'spot'])
     ->except(['show']);

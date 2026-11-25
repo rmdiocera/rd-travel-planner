@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Http\Controllers\Api\V1;
 
 use App\Http\Controllers\Controller;
+use App\Http\Requests\Api\V1\ReorderItinerarySpotsRequest;
 use App\Http\Requests\Api\V1\StoreItinerarySpotRequest;
 use App\Http\Requests\Api\V1\UpdateItinerarySpotRequest;
 use App\Http\Resources\ItinerarySpotResource;
@@ -75,6 +76,16 @@ class ItinerarySpotController extends Controller
         }
 
         return new ItinerarySpotResource($spot->refresh()->load('place'));
+    }
+
+    /**
+     * Reorder the spots of one day. The request has already authorized the user.
+     */
+    public function reorder(ReorderItinerarySpotsRequest $request, Itinerary $itinerary): JsonResponse
+    {
+        $itinerary->reorderSpots($request->validated('visit_date'), $request->validated('spot_ids'));
+
+        return response()->json(null, 204);
     }
 
     /**

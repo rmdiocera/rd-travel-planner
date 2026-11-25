@@ -41,6 +41,14 @@ class ItinerarySpotPolicy
     }
 
     /**
+     * Determine whether the user can reorder the model.
+     */
+    public function reorder(User $user, Itinerary $itinerary): bool
+    {
+        return $user->id === $itinerary->user_id;
+    }
+
+    /**
      * Determine whether the user can delete the model.
      */
     public function delete(User $user, ItinerarySpot $spot, Itinerary $itinerary): bool
