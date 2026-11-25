@@ -25,14 +25,18 @@ class ReorderItinerarySpotsRequest extends FormRequest
     /**
      * Get the validation rules that apply to the request.
      *
+     * `spot_ids.*` has no `distinct`: it compares every id with every other,
+     * which is quadratic on a large array, and the after() check below
+     * already rejects a repeated id.
+     *
      * @return array<string, ValidationRule|array<mixed>|string>
      */
     public function rules(): array
     {
         return [
             'visit_date' => ['required', 'date_format:Y-m-d'],
-            'spot_ids' => ['required', 'array', 'list'],
-            'spot_ids.*' => ['required', 'string', 'distinct'],
+            'spot_ids' => ['required', 'array', 'list', 'max:255'],
+            'spot_ids.*' => ['required', 'string'],
         ];
     }
 

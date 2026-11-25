@@ -6,6 +6,7 @@ use App\Models\Itinerary;
 use App\Models\ItinerarySpot;
 use App\Models\Place;
 use App\Models\User;
+use Illuminate\Support\Str;
 
 test('unauthenticated users cannot access spot endpoints', function () {
     $itinerary = Itinerary::factory()->create();
@@ -36,7 +37,14 @@ test('grouped spots are keyed by date with each day in sort_order', function () 
     $user = User::factory()->create();
     $itinerary = Itinerary::factory()->for($user)->create();
     createSpotsOnDay($itinerary, '2026-06-10', ['10:00']);
-    [$afternoon, $morning] = createSpotsOnDay($itinerary, '2026-06-09', ['14:00', '09:00']);
+    $create_spot = fn (?string $start_time, int $sort_order) => ItinerarySpot::factory()->for($itinerary)->create([
+        'visit_date' => '2026-06-09',
+        'start_time' => $start_time,
+        'sort_order' => $sort_order,
+    ]);
+    $third = $create_spot('09:00', 3);
+    $second = $create_spot('14:00', 2);
+    $first = $create_spot(null, 1);
 
     $data = $this->actingAs($user)
         ->getJson("/api/v1/itineraries/{$itinerary->id}/spots?group_by_date=1")
@@ -44,8 +52,8 @@ test('grouped spots are keyed by date with each day in sort_order', function () 
         ->json('data');
 
     expect(array_keys($data))->toBe(['2026-06-09', '2026-06-10']);
-    expect(array_column($data['2026-06-09'], 'id'))->toBe([$afternoon->id, $morning->id]);
-    expect($data['2026-06-09'][0]['sort_order'])->toBe(1);
+    expect(array_column($data['2026-06-09'], 'id'))->toBe([$first->id, $second->id, $third->id]);
+    expect(array_column($data['2026-06-09'], 'sort_order'))->toBe([1, 2, 3]);
 });
 
 test('grouped spots list every visit to the same place', function () {
@@ -338,6 +346,23 @@ test('a start time equal to the previous timed spot\'s keeps the spot in place',
     expect(spotIdsBySortOrder($itinerary, '2026-06-09'))->toBe([1 => $first->id, 2 => $second->id]);
 });
 
+test('a start time equal to the next timed spot\'s keeps the spot in place', function () {
+    $user = User::factory()->create();
+    $itinerary = Itinerary::factory()->for($user)->create();
+    [$first, $second] = createSpotsOnDay($itinerary, '2026-06-09', [null, '11:00']);
+
+    $this->actingAs($user)
+        ->patchJson("/api/v1/itineraries/{$itinerary->id}/spots/{$first->id}", [
+            'visit_date' => '2026-06-09',
+            'start_time' => '11:00',
+            'end_time' => null,
+        ])
+        ->assertOk()
+        ->assertJsonPath('data.sort_order', 1);
+
+    expect(spotIdsBySortOrder($itinerary, '2026-06-09'))->toBe([1 => $first->id, 2 => $second->id]);
+});
+
 test('the earlier-neighbour check runs first on a day out of time order', function () {
     $user = User::factory()->create();
     $itinerary = Itinerary::factory()->for($user)->create();
@@ -447,6 +472,23 @@ test('deleting a spot renumbers its day', function () {
 
     expect(spotIdsBySortOrder($itinerary, '2026-06-09'))->toBe([1 => $second->id, 2 => $third->id]);
     expect(spotIdsBySortOrder($itinerary, '2026-06-10'))->toBe([1 => $next_day_spot->id]);
+});
+
+test('deleting a place renumbers each day that had a spot of it', function () {
+    $user = User::factory()->create();
+    $itinerary = Itinerary::factory()->for($user)->create();
+    $place = Place::factory()->create();
+    [$first, $removed, $third] = createSpotsOnDay($itinerary, '2026-06-09', [null, null, null]);
+    [$next_day_removed, $next_day_kept] = createSpotsOnDay($itinerary, '2026-06-10', [null, null]);
+    $removed->update(['place_id' => $place->id]);
+    $next_day_removed->update(['place_id' => $place->id]);
+
+    $this->actingAs($user)
+        ->deleteJson("/api/v1/places/{$place->id}")
+        ->assertNoContent();
+
+    expect(spotIdsBySortOrder($itinerary, '2026-06-09'))->toBe([1 => $first->id, 2 => $third->id]);
+    expect(spotIdsBySortOrder($itinerary, '2026-06-10'))->toBe([1 => $next_day_kept->id]);
 });
 
 test('user cannot delete a spot on another user\'s itinerary', function () {
@@ -564,9 +606,25 @@ test('reorder rejects a repeated spot', function () {
             'spot_ids' => [$harajuku->id, $senso_ji->id, $meiji_jingu->id, $shibuya_crossing->id, $senso_ji->id],
         ])
         ->assertUnprocessable()
-        ->assertJsonValidationErrors(['spot_ids.4']);
+        ->assertJsonValidationErrors(['spot_ids' => 'The spot ids must list every spot on this day exactly once.']);
 
     expect(spotIdsBySortOrder($itinerary, '2026-06-09'))->toBe([1 => $senso_ji->id, 2 => $meiji_jingu->id, 3 => $shibuya_crossing->id, 4 => $harajuku->id]);
+});
+
+test('reorder rejects more than 255 spot ids', function () {
+    $user = User::factory()->create();
+    $itinerary = Itinerary::factory()->for($user)->create();
+    [$senso_ji] = createSpotsOnDay($itinerary, '2026-06-09', ['10:00']);
+
+    $this->actingAs($user)
+        ->patchJson("/api/v1/itineraries/{$itinerary->id}/spots/reorder", [
+            'visit_date' => '2026-06-09',
+            'spot_ids' => collect(range(1, 256))->map(fn () => (string) Str::ulid())->all(),
+        ])
+        ->assertUnprocessable()
+        ->assertJsonValidationErrors(['spot_ids' => 'The spot ids field must not have more than 255 items.']);
+
+    expect(spotIdsBySortOrder($itinerary, '2026-06-09'))->toBe([1 => $senso_ji->id]);
 });
 
 test('reorder rejects spot_ids sent as an object', function () {

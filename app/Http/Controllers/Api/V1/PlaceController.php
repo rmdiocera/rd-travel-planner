@@ -9,6 +9,7 @@ use App\Http\Requests\Api\V1\IndexPlaceRequest;
 use App\Http\Requests\Api\V1\StorePlaceRequest;
 use App\Http\Requests\Api\V1\UpdatePlaceRequest;
 use App\Http\Resources\PlaceResource;
+use App\Models\ItinerarySpot;
 use App\Models\Place;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\JsonResponse;
@@ -72,9 +73,20 @@ class PlaceController extends Controller
         return new PlaceResource($place->load('tags'));
     }
 
+    /**
+     * The database deletes the place's spots along with it, so renumber
+     * each day that loses one.
+     */
     public function destroy(Place $place): JsonResponse
     {
+        $days = $place->spots()
+            ->with('itinerary')
+            ->get(['itinerary_id', 'visit_date'])
+            ->unique(fn (ItinerarySpot $spot) => "{$spot->itinerary_id}|{$spot->visit_date->toDateString()}");
+
         $place->delete();
+
+        $days->each(fn (ItinerarySpot $spot) => $spot->itinerary->renumberSpotsOn($spot->visit_date->toDateString()));
 
         return response()->json(null, 204);
     }
