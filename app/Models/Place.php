@@ -45,6 +45,11 @@ class Place extends Model
         return $this->hasMany(PlaceImage::class, 'place_id');
     }
 
+    public function spots(): HasMany
+    {
+        return $this->hasMany(ItinerarySpot::class);
+    }
+
     /**
      * Keep places whose name or city contains every word of the term, in any order.
      *
