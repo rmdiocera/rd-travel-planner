@@ -267,6 +267,33 @@ test('authenticated user can create a place with images', function () {
     }
 });
 
+test('the place store response gives each image a url under the images link', function () {
+    $user = User::factory()->create();
+
+    Storage::fake('images', ['url' => config('filesystems.disks.images.url')]);
+
+    $images = $this->actingAs($user)
+        ->postJson('/api/v1/places', [
+            'name' => 'Kyoto Railway Museum',
+            'details' => 'Railway museum with steam locomotives and a working roundhouse.',
+            'address' => 'Kankijicho, Shimogyo Ward, Kyoto, 600-8835, Japan',
+            'country' => 'Japan',
+            'city' => 'Kyoto',
+            'images' => [
+                UploadedFile::fake()->image('first.jpg', 800, 800),
+                UploadedFile::fake()->image('second.jpg', 800, 800),
+            ],
+        ])
+        ->assertCreated()
+        ->json('data.images');
+
+    expect($images)->toHaveCount(2);
+    expect(array_column($images, 'url'))->toBe(array_map(
+        fn (array $image): string => asset("images/{$image['path']}"),
+        $images,
+    ));
+});
+
 test('store returns validation errors if uploaded file is not a valid image', function () {
     $user = User::factory()->create();
 

@@ -7,6 +7,7 @@ use App\Models\ItinerarySpot;
 use App\Models\Place;
 use App\Models\PlaceImage;
 use App\Models\User;
+use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 
@@ -78,7 +79,7 @@ test('grouped spots include each place\'s images in upload order', function () {
     $itinerary = Itinerary::factory()->for($user)->create();
     $pictured_place = Place::factory()->create();
     [$first_image, $second_image] = PlaceImage::factory()->count(2)->create(['place_id' => $pictured_place->id])->all();
-    $create_spot = fn (Place $place, int $sort_order) => ItinerarySpot::factory()->for($itinerary)->for($place)->create([
+    $create_spot = fn (Place $place, int $sort_order): ItinerarySpot => ItinerarySpot::factory()->for($itinerary)->for($place)->create([
         'visit_date' => '2026-06-09',
         'sort_order' => $sort_order,
     ]);
@@ -113,7 +114,7 @@ test('ungrouped spots include each place\'s images', function () {
 test('grouped spots load place images without a query per spot', function () {
     $user = User::factory()->create();
     $itinerary = Itinerary::factory()->for($user)->create();
-    $add_pictured_spots = fn (int $count) => ItinerarySpot::factory()
+    $add_pictured_spots = fn (int $count): Collection => ItinerarySpot::factory()
         ->count($count)
         ->for($itinerary)
         ->create(['visit_date' => '2026-06-09'])
